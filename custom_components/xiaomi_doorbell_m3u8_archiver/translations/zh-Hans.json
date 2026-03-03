@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "小米门铃 M3U8 归档器",
+        "description": "配置门铃视频归档器设置",
+        "data": {
+          "camera_entity_id": "摄像机实体",
+          "storage_root": "存储根目录",
+          "ffmpeg_path": "FFmpeg 路径",
+          "fetch_concurrency": "下载并发数",
+          "process_concurrency": "处理并发数",
+          "max_queue_size": "最大队列长度",
+          "retry_limit": "重试次数",
+          "retry_backoff_sec": "重试等待时间（秒）"
+        }
+      }
+    },
+    "error": {
+      "invalid_storage_path": "指定的存储路径不存在或没有写入权限，请检查配置。",
+      "ffmpeg_not_found": "无法找到 FFmpeg，请检查路径或确保系统已安装 FFmpeg。",
+      "cannot_connect": "连接失败",
+      "unknown": "未知错误"
+    }
+  }
+}
