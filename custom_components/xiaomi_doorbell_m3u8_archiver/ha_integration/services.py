@@ -6,6 +6,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 
 from ..const import (
@@ -13,11 +14,28 @@ from ..const import (
     ATTR_ENTITY_ID,
     ATTR_EVENT_TIME,
     DOMAIN,
+    SENSOR_IS_BUSY,
     SERVICE_ENQUEUE,
     SERVICE_GET_STATUS,
 )
-from .runtime_routing import resolve_runtime, resolve_status_runtimes
 from .resolver import build_source_request
+from .runtime_routing import (
+    RuntimeRoutingError,
+    resolve_runtime,
+    resolve_status_runtimes,
+)
+
+
+def _service_validation_error(
+    message: str,
+    translation_key: str,
+) -> ServiceValidationError:
+    return ServiceValidationError(
+        message,
+        translation_domain=DOMAIN,
+        translation_key=translation_key,
+    )
+
 
 ENQUEUE_SCHEMA = vol.Schema(
     {
@@ -74,10 +92,17 @@ async def async_register_services(hass: HomeAssistant) -> None:
 
     async def _handle_enqueue(call: ServiceCall) -> None:
         entity_id = call.data[ATTR_ENTITY_ID]
-        runtime = _get_runtime(entity_id=entity_id)
+        try:
+            runtime = _get_runtime(entity_id=entity_id)
+        except RuntimeRoutingError as exc:
+            raise _service_validation_error(str(exc), exc.translation_key) from exc
+
         state = hass.states.get(entity_id)
         if state is None:
-            raise ValueError(f"Entity not found: {entity_id}")
+            raise _service_validation_error(
+                f"Entity not found: {entity_id}",
+                "entity_not_found",
+            )
 
         request = build_source_request(
             entity_id=entity_id,
@@ -86,14 +111,20 @@ async def async_register_services(hass: HomeAssistant) -> None:
             event_time=call.data.get(ATTR_EVENT_TIME),
         )
         if request is None:
-            raise ValueError(f"Entity has no stream_address attribute: {entity_id}")
+            raise _service_validation_error(
+                f"Entity has no stream_address attribute: {entity_id}",
+                "missing_stream_address",
+            )
 
         await runtime.enqueue_request(request)
 
     async def _handle_get_status(call: ServiceCall) -> dict:
         entry_id = call.data.get(ATTR_ENTRY_ID)
         entity_id = call.data.get(ATTR_ENTITY_ID)
-        target_runtimes = _get_status_runtimes(entry_id=entry_id, entity_id=entity_id)
+        try:
+            target_runtimes = _get_status_runtimes(entry_id=entry_id, entity_id=entity_id)
+        except RuntimeRoutingError as exc:
+            raise _service_validation_error(str(exc), exc.translation_key) from exc
 
         entry_camera_entity = domain_data.get("entry_camera_entity", {})
         instances: dict[str, dict] = {}
@@ -112,7 +143,7 @@ async def async_register_services(hass: HomeAssistant) -> None:
             total_done += int(metrics.get("total_done", 0))
             total_failed += int(metrics.get("total_failed", 0))
             processed_today += int(metrics.get("processed_today", 0))
-            if metrics.get("current_job_status") == "busy":
+            if metrics.get(SENSOR_IS_BUSY, False):
                 busy_instances += 1
 
         if len(instances) == 1:

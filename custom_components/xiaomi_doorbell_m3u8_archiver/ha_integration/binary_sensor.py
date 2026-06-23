@@ -33,10 +33,11 @@ class RuntimeBusyBinarySensor(BinarySensorEntity):
     """Expose runtime busy/idle state as a binary sensor."""
 
     _attr_should_poll = True
+    _attr_has_entity_name = True
 
     def __init__(self, runtime: IntegrationRuntime, entry_id: str) -> None:
         self._runtime = runtime
-        self._attr_name = "Xiaomi Doorbell M3U8 Is Busy"
+        self._attr_translation_key = SENSOR_IS_BUSY
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_{SENSOR_IS_BUSY}"
 
     @property

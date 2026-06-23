@@ -23,14 +23,14 @@ from .coordinator import IntegrationRuntime
 
 SCAN_INTERVAL = timedelta(seconds=5)
 
-SENSOR_DEFINITIONS: tuple[tuple[str, str], ...] = (
-    (SENSOR_TOTAL_DONE, "Total Done"),
-    (SENSOR_TOTAL_FAILED, "Total Failed"),
-    (SENSOR_PROCESSED_TODAY, "Processed Today"),
-    (SENSOR_QUEUE_FETCH, "Queue Fetch Size"),
-    (SENSOR_QUEUE_PROCESS, "Queue Process Size"),
-    (SENSOR_LAST_JOB_STATUS, "Last Job Status"),
-    (SENSOR_CURRENT_JOB_STATUS, "Current Job Status"),
+SENSOR_DEFINITIONS: tuple[str, ...] = (
+    SENSOR_TOTAL_DONE,
+    SENSOR_TOTAL_FAILED,
+    SENSOR_PROCESSED_TODAY,
+    SENSOR_QUEUE_FETCH,
+    SENSOR_QUEUE_PROCESS,
+    SENSOR_LAST_JOB_STATUS,
+    SENSOR_CURRENT_JOB_STATUS,
 )
 
 
@@ -47,8 +47,8 @@ async def async_setup_entry(
         return
 
     entities = [
-        RuntimeMetricSensor(runtime, entry.entry_id, metric_key, label)
-        for metric_key, label in SENSOR_DEFINITIONS
+        RuntimeMetricSensor(runtime, entry.entry_id, metric_key)
+        for metric_key in SENSOR_DEFINITIONS
     ]
     async_add_entities(entities, True)
 
@@ -57,17 +57,17 @@ class RuntimeMetricSensor(SensorEntity):
     """Expose one runtime metric as an individual sensor entity."""
 
     _attr_should_poll = True
+    _attr_has_entity_name = True
 
     def __init__(
         self,
         runtime: IntegrationRuntime,
         entry_id: str,
         metric_key: str,
-        label: str,
     ) -> None:
         self._runtime = runtime
         self._metric_key = metric_key
-        self._attr_name = f"Xiaomi Doorbell M3U8 {label}"
+        self._attr_translation_key = metric_key
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_{metric_key}"
         self._attr_native_value: Any = None
 

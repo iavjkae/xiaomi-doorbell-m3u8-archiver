@@ -1,4 +1,5 @@
 {
+  "title": "Xiaomi Doorbell M3U8 Archiver",
   "config": {
     "step": {
       "user": {
@@ -21,6 +22,112 @@
       "ffmpeg_not_found": "FFmpeg binary not found at the specified path or in system PATH.",
       "cannot_connect": "Failed to connect",
       "unknown": "Unexpected error"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "total_done": {
+        "name": "Total done"
+      },
+      "total_failed": {
+        "name": "Total failed"
+      },
+      "processed_today": {
+        "name": "Processed today"
+      },
+      "queue_fetch_size": {
+        "name": "Fetch queue size"
+      },
+      "queue_process_size": {
+        "name": "Process queue size"
+      },
+      "last_job_status": {
+        "name": "Last job status",
+        "state": {
+          "created": "Created",
+          "fetching": "Fetching",
+          "fetched": "Fetched",
+          "processing": "Processing",
+          "processed": "Processed",
+          "stored": "Stored",
+          "done": "Done",
+          "failed": "Failed"
+        }
+      },
+      "current_job_status": {
+        "name": "Current job status",
+        "state": {
+          "created": "Created",
+          "fetching": "Fetching",
+          "fetched": "Fetched",
+          "processing": "Processing",
+          "processed": "Processed",
+          "stored": "Stored",
+          "done": "Done",
+          "failed": "Failed"
+        }
+      }
+    },
+    "binary_sensor": {
+      "is_busy": {
+        "name": "Busy"
+      }
+    }
+  },
+  "services": {
+    "enqueue": {
+      "name": "Enqueue",
+      "description": "Enqueue a manual video job from an entity.",
+      "fields": {
+        "entity_id": {
+          "name": "Entity",
+          "description": "Camera or Xiaomi doorbell entity ID."
+        },
+        "event_time": {
+          "name": "Event time",
+          "description": "Optional event time override."
+        }
+      }
+    },
+    "get_status": {
+      "name": "Get status",
+      "description": "Return runtime status; without a target and with multiple entries, returns all instances.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "Optional config entry ID target."
+        },
+        "entity_id": {
+          "name": "Entity",
+          "description": "Optional camera entity ID target."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "no_runtime_available": {
+      "message": "No runtime is available."
+    },
+    "entry_entity_mismatch": {
+      "message": "The selected config entry does not match the selected entity."
+    },
+    "unknown_entry_id": {
+      "message": "The selected config entry does not exist."
+    },
+    "entity_maps_multiple_entries": {
+      "message": "The selected entity maps to multiple integration entries; specify the config entry ID."
+    },
+    "runtime_not_configured_for_entity": {
+      "message": "No runtime is configured for the selected entity."
+    },
+    "runtime_target_required": {
+      "message": "Multiple integration entries exist; specify the config entry ID or entity ID."
+    },
+    "entity_not_found": {
+      "message": "The target entity was not found in Home Assistant."
+    },
+    "missing_stream_address": {
+      "message": "The target entity does not expose the required stream_address attribute."
     }
   }
 }

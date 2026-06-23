@@ -5,6 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 
+class RuntimeRoutingError(ValueError):
+    """Service-facing runtime resolution error with a translation key."""
+
+    def __init__(self, message: str, translation_key: str) -> None:
+        super().__init__(message)
+        self.translation_key = translation_key
+
+
 def resolve_runtime(
     runtimes: dict[str, Any],
     entry_camera_entity: dict[str, str],
@@ -17,19 +25,23 @@ def resolve_runtime(
     Routing is strict for multi-entry setups to prevent silent cross-camera actions.
     """
     if not runtimes:
-        raise ValueError("No runtime available")
+        raise RuntimeRoutingError("No runtime available", "no_runtime_available")
 
     if entry_id and entity_id:
         mapped = entry_camera_entity.get(entry_id)
         if mapped != entity_id:
-            raise ValueError(
-                f"entry_id {entry_id} does not match entity_id {entity_id}"
+            raise RuntimeRoutingError(
+                f"entry_id {entry_id} does not match entity_id {entity_id}",
+                "entry_entity_mismatch",
             )
 
     if entry_id:
         runtime = runtimes.get(entry_id)
         if runtime is None:
-            raise ValueError(f"Unknown entry_id: {entry_id}")
+            raise RuntimeRoutingError(
+                f"Unknown entry_id: {entry_id}",
+                "unknown_entry_id",
+            )
         return runtime
 
     if entity_id:
@@ -41,17 +53,24 @@ def resolve_runtime(
         if len(matched_entries) == 1:
             return runtimes[matched_entries[0]]
         if len(matched_entries) > 1:
-            raise ValueError(
-                f"Entity {entity_id} maps to multiple entries; use entry_id"
+            raise RuntimeRoutingError(
+                f"Entity {entity_id} maps to multiple entries; use entry_id",
+                "entity_maps_multiple_entries",
             )
         if len(runtimes) == 1:
             return next(iter(runtimes.values()))
-        raise ValueError(f"No runtime configured for entity_id: {entity_id}")
+        raise RuntimeRoutingError(
+            f"No runtime configured for entity_id: {entity_id}",
+            "runtime_not_configured_for_entity",
+        )
 
     if len(runtimes) == 1:
         return next(iter(runtimes.values()))
 
-    raise ValueError("Multiple runtimes configured; specify entry_id or entity_id")
+    raise RuntimeRoutingError(
+        "Multiple runtimes configured; specify entry_id or entity_id",
+        "runtime_target_required",
+    )
 
 
 def resolve_status_runtimes(
@@ -83,10 +102,13 @@ def resolve_status_runtimes(
             only_entry_id, only_runtime = next(iter(runtimes.items()))
             return {only_entry_id: only_runtime}
 
-        raise ValueError(f"No runtime configured for entity_id: {entity_id}")
+        raise RuntimeRoutingError(
+            f"No runtime configured for entity_id: {entity_id}",
+            "runtime_not_configured_for_entity",
+        )
 
     if not runtimes:
-        raise ValueError("No runtime available")
+        raise RuntimeRoutingError("No runtime available", "no_runtime_available")
 
     if len(runtimes) == 1:
         only_entry_id, only_runtime = next(iter(runtimes.items()))

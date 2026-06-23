@@ -1,4 +1,5 @@
 {
+  "title": "小米门铃 M3U8 归档器",
   "config": {
     "step": {
       "user": {
@@ -21,6 +22,112 @@
       "ffmpeg_not_found": "无法找到 FFmpeg，请检查路径或确保系统已安装 FFmpeg。",
       "cannot_connect": "连接失败",
       "unknown": "未知错误"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "total_done": {
+        "name": "完成总数"
+      },
+      "total_failed": {
+        "name": "失败总数"
+      },
+      "processed_today": {
+        "name": "今日处理数"
+      },
+      "queue_fetch_size": {
+        "name": "下载队列长度"
+      },
+      "queue_process_size": {
+        "name": "处理队列长度"
+      },
+      "last_job_status": {
+        "name": "最近任务状态",
+        "state": {
+          "created": "已创建",
+          "fetching": "下载中",
+          "fetched": "已下载",
+          "processing": "处理中",
+          "processed": "已处理",
+          "stored": "已存储",
+          "done": "已完成",
+          "failed": "失败"
+        }
+      },
+      "current_job_status": {
+        "name": "当前任务状态",
+        "state": {
+          "created": "已创建",
+          "fetching": "下载中",
+          "fetched": "已下载",
+          "processing": "处理中",
+          "processed": "已处理",
+          "stored": "已存储",
+          "done": "已完成",
+          "failed": "失败"
+        }
+      }
+    },
+    "binary_sensor": {
+      "is_busy": {
+        "name": "忙碌中"
+      }
+    }
+  },
+  "services": {
+    "enqueue": {
+      "name": "手动入队",
+      "description": "从实体手动创建一个视频处理任务并加入队列。",
+      "fields": {
+        "entity_id": {
+          "name": "实体",
+          "description": "摄像头或小米门铃实体 ID。"
+        },
+        "event_time": {
+          "name": "事件时间",
+          "description": "可选的事件时间覆盖值。"
+        }
+      }
+    },
+    "get_status": {
+      "name": "获取状态",
+      "description": "返回运行时状态；未指定目标且存在多个实例时，返回所有实例。",
+      "fields": {
+        "entry_id": {
+          "name": "配置项 ID",
+          "description": "可选，用于指定某个配置项实例。"
+        },
+        "entity_id": {
+          "name": "实体",
+          "description": "可选，用于指定某个摄像头实体实例。"
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "no_runtime_available": {
+      "message": "当前没有可用的运行时实例。"
+    },
+    "entry_entity_mismatch": {
+      "message": "所选配置项与所选实体不匹配。"
+    },
+    "unknown_entry_id": {
+      "message": "所选配置项不存在。"
+    },
+    "entity_maps_multiple_entries": {
+      "message": "所选实体映射到多个集成实例，请指定配置项 ID。"
+    },
+    "runtime_not_configured_for_entity": {
+      "message": "所选实体尚未配置对应的运行时实例。"
+    },
+    "runtime_target_required": {
+      "message": "当前存在多个集成实例，请指定配置项 ID 或实体 ID。"
+    },
+    "entity_not_found": {
+      "message": "Home Assistant 中未找到目标实体。"
+    },
+    "missing_stream_address": {
+      "message": "目标实体缺少必需的 stream_address 属性。"
     }
   }
 }
