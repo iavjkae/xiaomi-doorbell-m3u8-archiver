@@ -1,6 +1,7 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.helpers.device_registry import DeviceEntryType
 
 from custom_components.xiaomi_doorbell_m3u8_archiver.const import (
     DOMAIN,
@@ -12,6 +13,9 @@ from custom_components.xiaomi_doorbell_m3u8_archiver.const import (
 from custom_components.xiaomi_doorbell_m3u8_archiver.core.domain import JobStatus
 from custom_components.xiaomi_doorbell_m3u8_archiver.ha_integration.binary_sensor import (
     RuntimeBusyBinarySensor,
+)
+from custom_components.xiaomi_doorbell_m3u8_archiver.ha_integration.entity import (
+    async_register_archive_device,
 )
 from custom_components.xiaomi_doorbell_m3u8_archiver.ha_integration.sensor import (
     RuntimeMetricSensor,
@@ -31,6 +35,7 @@ def test_metric_sensor_uses_translation_key() -> None:
     assert entity.device_class is None
     assert entity.options is None
     assert entity.device_info["identifiers"] == {(DOMAIN, "entry-1")}
+    assert entity.device_info["entry_type"] == DeviceEntryType.SERVICE
 
 
 def test_status_sensors_use_enum_state_translations() -> None:
@@ -64,3 +69,24 @@ def test_busy_binary_sensor_uses_translation_key() -> None:
     assert entity.unique_id == f"{DOMAIN}_entry-1_{SENSOR_IS_BUSY}"
     assert entity.is_on is True
     assert entity.device_info["identifiers"] == {(DOMAIN, "entry-1")}
+    assert entity.device_info["entry_type"] == DeviceEntryType.SERVICE
+
+
+def test_archive_device_is_explicitly_registered() -> None:
+    hass = MagicMock()
+    registry = MagicMock()
+
+    with patch(
+        "custom_components.xiaomi_doorbell_m3u8_archiver.ha_integration.entity.dr.async_get",
+        return_value=registry,
+    ):
+        async_register_archive_device(hass, "entry-1", "Front door archive")
+
+    registry.async_get_or_create.assert_called_once_with(
+        config_entry_id="entry-1",
+        entry_type=DeviceEntryType.SERVICE,
+        identifiers={(DOMAIN, "entry-1")},
+        manufacturer="Xiaomi",
+        model="Xiaomi Doorbell M3U8 Archiver",
+        name="Front door archive",
+    )

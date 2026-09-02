@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="icon.png" width="128" height="128" alt="Xiaomi Doorbell M3U8 Archiver logo">
+</p>
+
 ## Xiaomi Doorbell M3U8 Archiver
 
 Custom Home Assistant integration for Xiaomi doorbell video event pipeline.
@@ -110,6 +114,22 @@ The integration also provides one stable media source named **Xiaomi Doorbell M3
 Archiver**. Open Home Assistant's Media browser and select it to list every MP4 archived
 today. The file list is generated when the source is opened, without creating one entity
 per file or periodically polling the filesystem. Select a video to start playback.
+
+### Dashboard Card
+
+After restarting Home Assistant, add the **Xiaomi Doorbell Archive** custom card from the
+dashboard card picker. It loads today's list once when the card opens and resolves a video
+only after it is selected. Use the refresh button to rescan manually.
+
+The equivalent YAML configuration is:
+
+```yaml
+type: custom:xiaomi-doorbell-archive-card
+title: Today's doorbell videos
+# entry_id: optional-config-entry-id
+```
+
+Without `entry_id`, the card shows today's videos from all configured archive entries.
 
 ### Services
 

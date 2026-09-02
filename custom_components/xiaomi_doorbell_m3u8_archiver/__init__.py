@@ -18,10 +18,13 @@ if TYPE_CHECKING:
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up integration base (UI config only)."""
+    from .ha_integration.frontend import async_register_frontend
+
     hass.data.setdefault(
         DOMAIN,
         {"runtimes": {}, "entry_camera_entity": {}, "services_registered": False},
     )
+    await async_register_frontend(hass)
     return True
 
 
@@ -30,6 +33,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     platforms_loaded = False
     try:
         from .ha_integration.coordinator import IntegrationRuntime
+        from .ha_integration.entity import async_register_archive_device
         from .ha_integration.listener import async_setup_listener
         from .ha_integration.services import async_register_services, async_unregister_services
 
@@ -55,6 +59,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             runtime.unsub_listener = async_setup_listener(hass, runtime, camera_entity_id)
             _LOGGER.info("Listening Xiaomi doorbell entity: %s", camera_entity_id)
 
+        async_register_archive_device(
+            hass,
+            entry.entry_id,
+            entry.title or camera_entity_id,
+        )
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
         platforms_loaded = True
         await async_register_services(hass)

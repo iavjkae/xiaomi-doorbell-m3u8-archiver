@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="icon.png" width="128" height="128" alt="小米门铃 M3U8 归档器 Logo">
+</p>
+
 ## Xiaomi Doorbell M3U8 Archiver
 
 用于 Home Assistant 的小米门铃视频事件处理自定义集成。
@@ -110,6 +114,22 @@ python -m pytest -q tests/test_orchestrator_happy_path.py::test_orchestrator_hap
 Assistant 的媒体浏览器中打开该媒体源，即可列出今天归档的全部 MP4。文件列表只
 在打开媒体源时动态生成，不会为每个文件创建实体，也不会定时轮询文件系统；选择
 某个视频后才会开始播放。
+
+### Dashboard 卡片
+
+重启 Home Assistant 后，可以直接从 Dashboard 的卡片选择器添加 **Xiaomi
+Doorbell Archive** 自定义卡片。卡片打开时加载一次当天列表，只有选择某个视频后
+才解析并播放；需要重新扫描时可点击刷新按钮。
+
+对应的 YAML 配置如下：
+
+```yaml
+type: custom:xiaomi-doorbell-archive-card
+title: 今日门铃视频
+# entry_id: 可选的配置项 ID
+```
+
+不填写 `entry_id` 时，卡片会显示所有归档配置项今天的视频。
 
 ### 服务
 

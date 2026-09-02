@@ -34,7 +34,7 @@ run = [
 [tasks."test:integration"]
 description = "Run Home Assistant integration-boundary tests"
 run = [
-  "python -m pytest -q tests/test_config_flow.py tests/test_entity_translations.py tests/test_integration_overview.py tests/test_runtime_config_validation.py tests/test_runtime_motion_state.py tests/test_runtime_routing.py tests/test_runtime_status_metrics.py tests/test_services.py tests/test_stream_resolver.py tests/test_translation_sources.py",
+  "python -m pytest -q tests/test_brand_assets.py tests/test_config_flow.py tests/test_dashboard_card.py tests/test_entity_translations.py tests/test_integration_overview.py tests/test_runtime_config_validation.py tests/test_runtime_motion_state.py tests/test_runtime_routing.py tests/test_runtime_status_metrics.py tests/test_services.py tests/test_stream_resolver.py tests/test_translation_sources.py",
 ]
 
 [tasks.test]

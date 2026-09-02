@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Xiaomi Doorbell M3U8 Archiver</title>
+  <desc id="desc">A video doorbell with a play symbol and archive tray</desc>
+  <rect x="45" y="14" width="166" height="228" rx="46" fill="#17242d"/>
+  <rect x="51" y="20" width="154" height="216" rx="40" fill="none" stroke="#30b8b2" stroke-width="8"/>
+  <circle cx="128" cy="82" r="43" fill="#f8fafc"/>
+  <circle cx="128" cy="82" r="33" fill="#30b8b2"/>
+  <path d="M119 64.5 147 82l-28 17.5z" fill="#17242d"/>
+  <path d="M87 155h82l13 45H74z" fill="#f8fafc"/>
+  <path d="M83 180h90l4 14H79z" fill="#ff6b4a"/>
+  <path d="M128 120v48m0 0-18-18m18 18 18-18" fill="none" stroke="#30b8b2" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"/>
+</svg>
