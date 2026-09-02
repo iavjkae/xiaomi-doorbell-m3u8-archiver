@@ -21,7 +21,7 @@ Suggested setup:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -U pip pytest ruff homeassistant
+python -m pip install -U pip pytest pytest-asyncio ruff homeassistant
 ```
 
 Mise/uv setup:

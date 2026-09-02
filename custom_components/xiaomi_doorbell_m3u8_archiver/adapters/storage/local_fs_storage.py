@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 import shutil
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from ...const import META_MOTION_VIDEO_TIME
@@ -41,6 +41,57 @@ class LocalFsStorage:
 
         await asyncio.to_thread(shutil.move, str(src), str(dst))
         return StorageRecord(location=str(dst), meta={"job_id": job.job_id})
+
+    async def videos_for_day(self, day: date, source_ref: str) -> list[Path]:
+        """Return archived videos for one source on a calendar day, newest first."""
+        return await asyncio.to_thread(self._videos_for_day_sync, day, source_ref)
+
+    async def video_for_day(
+        self,
+        day: date,
+        source_ref: str,
+        filename: str,
+    ) -> Path | None:
+        """Resolve one archived video without allowing paths outside storage."""
+        return await asyncio.to_thread(
+            self._video_for_day_sync,
+            day,
+            source_ref,
+            filename,
+        )
+
+    def _videos_for_day_sync(self, day: date, source_ref: str) -> list[Path]:
+        folder = self._storage_root / day.strftime("%Y") / day.strftime("%m")
+        if not folder.is_dir():
+            return []
+
+        source_prefix = self._sanitize_source_ref(source_ref)
+        date_prefix = day.strftime("%Y_%m_%d")
+        candidates: list[tuple[int, Path]] = []
+        for path in folder.glob(f"{source_prefix}_{date_prefix}_*.mp4"):
+            try:
+                candidates.append((path.stat().st_mtime_ns, path))
+            except OSError:
+                continue
+        candidates.sort(key=lambda candidate: candidate[0], reverse=True)
+        return [path for _, path in candidates]
+
+    def _video_for_day_sync(
+        self,
+        day: date,
+        source_ref: str,
+        filename: str,
+    ) -> Path | None:
+        if Path(filename).name != filename:
+            return None
+
+        source_prefix = self._sanitize_source_ref(source_ref)
+        expected_prefix = f"{source_prefix}_{day.strftime('%Y_%m_%d')}_"
+        if not filename.startswith(expected_prefix) or not filename.endswith(".mp4"):
+            return None
+
+        candidate = self._storage_root / day.strftime("%Y") / day.strftime("%m") / filename
+        return candidate if candidate.is_file() else None
 
     def _build_non_conflicting_path(self, folder: Path, base_name: str) -> Path:
         candidate = folder / f"{base_name}.mp4"

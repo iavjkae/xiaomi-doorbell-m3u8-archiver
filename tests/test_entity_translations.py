@@ -22,7 +22,7 @@ def test_metric_sensor_uses_translation_key() -> None:
     runtime = MagicMock()
     runtime.metrics.return_value = {SENSOR_TOTAL_DONE: 3}
 
-    entity = RuntimeMetricSensor(runtime, "entry-1", SENSOR_TOTAL_DONE)
+    entity = RuntimeMetricSensor(runtime, "entry-1", SENSOR_TOTAL_DONE, "camera.front")
 
     assert entity.translation_key == SENSOR_TOTAL_DONE
     assert entity.has_entity_name is True
@@ -30,6 +30,7 @@ def test_metric_sensor_uses_translation_key() -> None:
     assert entity.native_value == 3
     assert entity.device_class is None
     assert entity.options is None
+    assert entity.device_info["identifiers"] == {(DOMAIN, "entry-1")}
 
 
 def test_status_sensors_use_enum_state_translations() -> None:
@@ -56,9 +57,10 @@ def test_busy_binary_sensor_uses_translation_key() -> None:
     runtime = MagicMock()
     runtime.metrics.return_value = {SENSOR_IS_BUSY: True}
 
-    entity = RuntimeBusyBinarySensor(runtime, "entry-1")
+    entity = RuntimeBusyBinarySensor(runtime, "entry-1", "camera.front")
 
     assert entity.translation_key == SENSOR_IS_BUSY
     assert entity.has_entity_name is True
     assert entity.unique_id == f"{DOMAIN}_entry-1_{SENSOR_IS_BUSY}"
     assert entity.is_on is True
+    assert entity.device_info["identifiers"] == {(DOMAIN, "entry-1")}

@@ -11,7 +11,7 @@ Set up a local Python environment and install test/lint tools:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -U pip pytest ruff homeassistant
+python -m pip install -U pip pytest pytest-asyncio ruff homeassistant
 ```
 
 Or use the mise/uv task setup:
@@ -100,6 +100,16 @@ After setup, validate:
 1. Sensor and binary sensor entities are created.
 2. New motion events change queue/process counters.
 3. Videos are written to `storage_root/YYYY/MM/` with entity-prefixed filenames.
+
+### Integration Overview and Videos
+
+Each config entry creates one archive device in Home Assistant. Open the integration and
+select that device to see the runtime counters, queue and job status entities together.
+
+The integration also provides one stable media source named **Xiaomi Doorbell M3U8
+Archiver**. Open Home Assistant's Media browser and select it to list every MP4 archived
+today. The file list is generated when the source is opened, without creating one entity
+per file or periodically polling the filesystem. Select a video to start playback.
 
 ### Services
 

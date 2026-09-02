@@ -11,7 +11,7 @@ English docs: `README.md`
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -U pip pytest ruff homeassistant
+python -m pip install -U pip pytest pytest-asyncio ruff homeassistant
 ```
 
 也可以使用 mise/uv 任务：
@@ -100,6 +100,16 @@ python -m pytest -q tests/test_orchestrator_happy_path.py::test_orchestrator_hap
 1. 传感器与二值传感器实体已创建。
 2. 新门铃事件到来时，队列/处理计数会变化。
 3. 视频写入 `storage_root/YYYY/MM/`，文件名带实体前缀。
+
+### 集成概览与视频
+
+每个配置项会在 Home Assistant 中创建一个归档器设备。进入本集成并打开该设备，
+即可集中查看运行计数、队列状态和任务状态等实体。
+
+集成还会提供一个名为 **Xiaomi Doorbell M3U8 Archiver** 的稳定媒体源。在 Home
+Assistant 的媒体浏览器中打开该媒体源，即可列出今天归档的全部 MP4。文件列表只
+在打开媒体源时动态生成，不会为每个文件创建实体，也不会定时轮询文件系统；选择
+某个视频后才会开始播放。
 
 ### 服务
 
