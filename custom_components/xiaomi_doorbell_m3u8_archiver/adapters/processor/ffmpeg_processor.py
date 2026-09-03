@@ -13,9 +13,43 @@ from ..common.process_result import ProcessResult
 class FfmpegProcessor:
     """FFmpeg-backed video processor with segmented merge strategy."""
 
-    def __init__(self, ffmpeg_path: str = "ffmpeg", runner=None) -> None:
+    THUMBNAIL_TIMEOUT_SECONDS = 15
+
+    def __init__(
+        self,
+        ffmpeg_path: str = "ffmpeg",
+        runner=None,
+        thumbnail_runner=None,
+        thumbnail_timeout: float = THUMBNAIL_TIMEOUT_SECONDS,
+    ) -> None:
         self._ffmpeg_path = ffmpeg_path
         self._runner = runner or self._run_subprocess
+        self._thumbnail_runner = thumbnail_runner or self._run_thumbnail_subprocess
+        self._thumbnail_timeout = thumbnail_timeout
+
+    async def extract_thumbnail(self, video_path: Path) -> bytes:
+        """Extract a representative JPEG frame without modifying the video."""
+        command = [
+            self._ffmpeg_path,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-ss",
+            "0.5",
+            "-i",
+            str(video_path),
+            "-frames:v",
+            "1",
+            "-vf",
+            "scale=640:-2",
+            "-an",
+            "-f",
+            "image2pipe",
+            "-c:v",
+            "mjpeg",
+            "pipe:1",
+        ]
+        return await self._thumbnail_runner(command)
 
     async def process(self, job: Job, input_artifact: Artifact) -> Artifact:
         input_path = Path(input_artifact.uri_or_path)
@@ -186,6 +220,27 @@ class FfmpegProcessor:
         try:
             _stdout, stderr = await process.communicate()
             return ProcessResult(return_code=process.returncode or 0, stderr=stderr.decode())
+        except asyncio.CancelledError:
+            await process_handle.cleanup()
+            raise
+
+    async def _run_thumbnail_subprocess(self, command: list[str]) -> bytes:
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        process_handle = ProcessCleanupHandle(process=process)
+        try:
+            async with asyncio.timeout(self._thumbnail_timeout):
+                stdout, stderr = await process.communicate()
+            if process.returncode != 0 or not stdout:
+                detail = stderr.decode(errors="replace")[-500:]
+                raise RuntimeError(f"ffmpeg thumbnail extraction failed: {detail}")
+            return stdout
+        except TimeoutError as exc:
+            await process_handle.cleanup()
+            raise RuntimeError("ffmpeg thumbnail extraction timed out") from exc
         except asyncio.CancelledError:
             await process_handle.cleanup()
             raise

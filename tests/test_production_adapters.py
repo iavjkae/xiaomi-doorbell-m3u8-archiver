@@ -253,3 +253,39 @@ def test_ffmpeg_subprocess_cancel_releases_process(monkeypatch) -> None:
         assert fake.terminated is True
 
     asyncio.run(scenario())
+
+
+def test_ffmpeg_thumbnail_timeout_releases_process(monkeypatch) -> None:
+    async def scenario() -> None:
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.returncode = None
+                self.terminated = False
+
+            async def communicate(self):
+                await asyncio.sleep(60)
+
+            def terminate(self) -> None:
+                self.terminated = True
+                self.returncode = -15
+
+            def kill(self) -> None:
+                self.returncode = -9
+
+            async def wait(self):
+                return self.returncode
+
+        fake = FakeProcess()
+
+        async def fake_create_subprocess_exec(*args, **kwargs):
+            return fake
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+        processor = FfmpegProcessor(ffmpeg_path="ffmpeg", thumbnail_timeout=0.001)
+
+        with pytest.raises(RuntimeError, match="thumbnail extraction timed out"):
+            await processor._run_thumbnail_subprocess(["ffmpeg", "-version"])
+
+        assert fake.terminated is True
+
+    asyncio.run(scenario())

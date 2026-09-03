@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 import shutil
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 
 from ...const import META_MOTION_VIDEO_TIME
@@ -20,8 +20,9 @@ def _utcnow() -> datetime:
 class LocalFsStorage:
     """Store processed output into date-based local storage path."""
 
-    def __init__(self, storage_root: Path) -> None:
+    def __init__(self, storage_root: Path, local_timezone: tzinfo = timezone.utc) -> None:
         self._storage_root = storage_root
+        self._local_timezone = local_timezone
         self._storage_root.mkdir(parents=True, exist_ok=True)
 
     async def store(self, job: Job, output_artifact: Artifact) -> StorageRecord:
@@ -144,12 +145,15 @@ class LocalFsStorage:
     def _extract_event_time(self, job: Job) -> datetime:
         raw = str(job.metadata.get(META_MOTION_VIDEO_TIME, "")).strip()
         if raw:
-            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
-                try:
-                    return datetime.strptime(raw, fmt).replace(tzinfo=timezone.utc)
-                except ValueError:
-                    continue
-        return _utcnow()
+            try:
+                parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            except ValueError:
+                pass
+            else:
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=self._local_timezone)
+                return parsed.astimezone(self._local_timezone)
+        return datetime.now(self._local_timezone)
 
     def _sanitize_source_ref(self, source_ref: str) -> str:
         # Source refs are entity-like ids (for example camera.xxx); sanitize to keep

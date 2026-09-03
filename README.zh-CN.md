@@ -110,7 +110,7 @@ python -m pytest -q tests/test_orchestrator_happy_path.py::test_orchestrator_hap
 每个配置项会在 Home Assistant 中创建一个归档器设备。进入本集成并打开该设备，
 即可集中查看运行计数、队列状态和任务状态等实体。
 
-集成还会提供一个名为 **Xiaomi Doorbell M3U8 Archiver** 的稳定媒体源。在 Home
+集成还会提供一个名为 **今日门铃视频** 的稳定媒体源。在 Home
 Assistant 的媒体浏览器中打开该媒体源，即可列出今天归档的全部 MP4。文件列表只
 在打开媒体源时动态生成，不会为每个文件创建实体，也不会定时轮询文件系统；选择
 某个视频后才会开始播放。
@@ -119,7 +119,8 @@ Assistant 的媒体浏览器中打开该媒体源，即可列出今天归档的�
 
 重启 Home Assistant 后，可以直接从 Dashboard 的卡片选择器添加 **Xiaomi
 Doorbell Archive** 自定义卡片。卡片打开时加载一次当天列表，只有选择某个视频后
-才解析并播放；需要重新扫描时可点击刷新按钮。
+才解析并播放。视频封面会按需从代表帧生成，并在本次 HA 运行期间缓存；需要重新
+扫描时可点击刷新按钮。
 
 对应的 YAML 配置如下：
 

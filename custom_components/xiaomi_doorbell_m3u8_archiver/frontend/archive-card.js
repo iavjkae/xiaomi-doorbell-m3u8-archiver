@@ -7,7 +7,8 @@ class XiaomiDoorbellArchiveCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._config = {};
     this._items = [];
-    this._resolvedUrls = new Map();
+    this._activeVideo = null;
+    this._activeVideoUrl = null;
     this._loaded = false;
     this._loading = false;
     this._loadingVideo = null;
@@ -28,7 +29,8 @@ class XiaomiDoorbellArchiveCard extends HTMLElement {
     if (entryChanged && this._loaded) {
       this._loaded = false;
       this._items = [];
-      this._resolvedUrls.clear();
+      this._activeVideo = null;
+      this._activeVideoUrl = null;
       void this._load();
     } else {
       this._render();
@@ -71,7 +73,8 @@ class XiaomiDoorbellArchiveCard extends HTMLElement {
       this._items = children.filter(
         (item) => item.can_play && this._matchesConfiguredEntry(item),
       );
-      this._resolvedUrls.clear();
+      this._activeVideo = null;
+      this._activeVideoUrl = null;
       this._loaded = true;
     } catch (error) {
       this._error = error instanceof Error ? error.message : String(error);
@@ -90,11 +93,6 @@ class XiaomiDoorbellArchiveCard extends HTMLElement {
 
   async _play(item) {
     const id = item.media_content_id;
-    if (this._resolvedUrls.has(id)) {
-      this._renderPlayer(id, true);
-      return;
-    }
-
     this._loadingVideo = id;
     this._error = null;
     this._render();
@@ -104,7 +102,7 @@ class XiaomiDoorbellArchiveCard extends HTMLElement {
         type: "media_source/resolve_media",
         media_content_id: id,
       });
-      this._resolvedUrls.set(id, resolved.url);
+      this._activeVideoUrl = resolved.url;
       readyToPlay = true;
     } catch (error) {
       this._error = error instanceof Error ? error.message : String(error);
@@ -197,11 +195,28 @@ class XiaomiDoorbellArchiveCard extends HTMLElement {
         cursor: pointer;
         display: flex;
         justify-content: center;
+        overflow: hidden;
         padding: 0;
+        position: relative;
         width: 100%;
       }
-      .preview ha-icon { --mdc-icon-size: 44px; }
-      .preview:hover ha-icon { color: #30b8b2; }
+      .thumbnail {
+        height: 100%;
+        object-fit: cover;
+        width: 100%;
+      }
+      .play-icon {
+        align-items: center;
+        background: rgb(0 0 0 / 58%);
+        border-radius: 50%;
+        display: flex;
+        height: 56px;
+        justify-content: center;
+        position: absolute;
+        width: 56px;
+      }
+      .play-icon ha-icon { --mdc-icon-size: 38px; }
+      .preview:hover .play-icon { background: rgb(0 0 0 / 72%); color: #30b8b2; }
       video {
         aspect-ratio: 16 / 9;
         background: #000;
@@ -281,13 +296,16 @@ class XiaomiDoorbellArchiveCard extends HTMLElement {
     const wrapper = document.createElement("article");
     wrapper.className = "video-item";
     const id = item.media_content_id;
-    const resolvedUrl = this._resolvedUrls.get(id);
+    const resolvedUrl = this._activeVideo === id ? this._activeVideoUrl : null;
 
     if (this._activeVideo === id && resolvedUrl) {
       const video = document.createElement("video");
       video.controls = true;
       video.playsInline = true;
       video.preload = "metadata";
+      if (item.thumbnail) {
+        video.poster = item.thumbnail;
+      }
       video.src = resolvedUrl;
       video.dataset.active = "true";
       video.addEventListener("play", () => this._pauseOtherVideos(video));
@@ -299,9 +317,20 @@ class XiaomiDoorbellArchiveCard extends HTMLElement {
       preview.title = this._text("play");
       preview.setAttribute("aria-label", `${this._text("play")}: ${item.title}`);
       preview.disabled = this._loadingVideo === id;
+      if (item.thumbnail) {
+        const thumbnail = document.createElement("img");
+        thumbnail.className = "thumbnail";
+        thumbnail.src = item.thumbnail;
+        thumbnail.alt = "";
+        thumbnail.loading = "lazy";
+        preview.append(thumbnail);
+      }
+      const playIcon = document.createElement("span");
+      playIcon.className = "play-icon";
       const icon = document.createElement("ha-icon");
       icon.setAttribute("icon", this._loadingVideo === id ? "mdi:loading" : "mdi:play-circle");
-      preview.append(icon);
+      playIcon.append(icon);
+      preview.append(playIcon);
       preview.addEventListener("click", () => void this._play(item));
       wrapper.append(preview);
     }
@@ -333,7 +362,7 @@ class XiaomiDoorbellArchiveCard extends HTMLElement {
     const zh = String(language).toLowerCase().startsWith("zh");
     const messages = zh
       ? {
-          title: "今日归档视频",
+          title: "今日门铃视频",
           count: `${count} 个视频`,
           refresh: "刷新",
           loading: "正在加载...",
@@ -342,7 +371,7 @@ class XiaomiDoorbellArchiveCard extends HTMLElement {
           play: "播放视频",
         }
       : {
-          title: "Today's archived videos",
+          title: "Today's Doorbell Videos",
           count: `${count} videos`,
           refresh: "Refresh",
           loading: "Loading...",

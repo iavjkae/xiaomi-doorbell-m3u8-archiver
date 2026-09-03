@@ -110,8 +110,8 @@ After setup, validate:
 Each config entry creates one archive device in Home Assistant. Open the integration and
 select that device to see the runtime counters, queue and job status entities together.
 
-The integration also provides one stable media source named **Xiaomi Doorbell M3U8
-Archiver**. Open Home Assistant's Media browser and select it to list every MP4 archived
+The integration also provides one stable media source named **Today's Doorbell Videos**.
+Open Home Assistant's Media browser and select it to list every MP4 archived
 today. The file list is generated when the source is opened, without creating one entity
 per file or periodically polling the filesystem. Select a video to start playback.
 
@@ -119,7 +119,8 @@ per file or periodically polling the filesystem. Select a video to start playbac
 
 After restarting Home Assistant, add the **Xiaomi Doorbell Archive** custom card from the
 dashboard card picker. It loads today's list once when the card opens and resolves a video
-only after it is selected. Use the refresh button to rescan manually.
+only after it is selected. Video covers are generated on demand from representative frames
+and cached for the current HA runtime. Use the refresh button to rescan manually.
 
 The equivalent YAML configuration is:
 

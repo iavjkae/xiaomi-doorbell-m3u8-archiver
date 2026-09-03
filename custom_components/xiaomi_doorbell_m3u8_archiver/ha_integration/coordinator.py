@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from homeassistant.util import dt as dt_util
+
 from ..adapters.storage.local_fs_storage import LocalFsStorage
 from ..adapters.processor.ffmpeg_processor import FfmpegProcessor
 from ..adapters.repository.runtime_repository import RuntimeRepository
@@ -91,7 +93,14 @@ class IntegrationRuntime:
         retention_policy = RetentionPolicy()
         source = HttpM3U8Source()
         processor = FfmpegProcessor(ffmpeg_path=cfg[CONF_FFMPEG_PATH])
-        storage = LocalFsStorage(storage_root=Path(cfg[CONF_STORAGE_ROOT]))
+        configured_timezone = (
+            dt_util.get_time_zone(getattr(getattr(hass, "config", None), "time_zone", "UTC"))
+            or dt_util.UTC
+        )
+        storage = LocalFsStorage(
+            storage_root=Path(cfg[CONF_STORAGE_ROOT]),
+            local_timezone=configured_timezone,
+        )
         repository = RuntimeRepository()
         orchestrator = Orchestrator(
             source=source,
