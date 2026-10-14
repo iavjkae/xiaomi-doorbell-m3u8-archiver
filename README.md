@@ -6,6 +6,10 @@
 
 Custom Home Assistant integration for Xiaomi doorbell video event pipeline.
 
+The integration includes local branding in `brand/icon.png` and `brand/logo.png`,
+with 512px `@2x` variants, for Home Assistant versions supporting local custom
+integration brand assets. Keep the `brand/` directory when installing the integration.
+
 中文文档：`README.zh-CN.md`
 
 ### Development

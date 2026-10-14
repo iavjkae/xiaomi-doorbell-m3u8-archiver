@@ -6,6 +6,10 @@
 
 用于 Home Assistant 的小米门铃视频事件处理自定义集成。
 
+集成包含本地品牌图 `brand/icon.png` 和 `brand/logo.png`，以及 512px 的 `@2x`
+版本，供支持自定义集成本地品牌资源的 Home Assistant 使用。安装时请保留集成
+目录中的 `brand/` 文件夹。
+
 English docs: `README.md`
 
 ### 开发环境

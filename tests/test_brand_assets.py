@@ -7,6 +7,8 @@ EXPECTED_ICONS = {
     Path("icon.png"): (256, 256),
     Path("custom_components/xiaomi_doorbell_m3u8_archiver/brand/icon.png"): (256, 256),
     Path("custom_components/xiaomi_doorbell_m3u8_archiver/brand/icon@2x.png"): (512, 512),
+    Path("custom_components/xiaomi_doorbell_m3u8_archiver/brand/logo.png"): (256, 256),
+    Path("custom_components/xiaomi_doorbell_m3u8_archiver/brand/logo@2x.png"): (512, 512),
 }
 
 
