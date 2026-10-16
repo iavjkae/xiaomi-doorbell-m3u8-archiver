@@ -12,6 +12,7 @@ from homeassistant.util import dt as dt_util
 
 from ..adapters.storage.local_fs_storage import LocalFsStorage
 from ..adapters.processor.ffmpeg_processor import FfmpegProcessor
+from ..adapters.processor.thumbnail_service import ThumbnailService
 from ..adapters.repository.runtime_repository import RuntimeRepository
 from ..adapters.source.http_m3u8_source import HttpM3U8Source
 from ..const import (
@@ -24,6 +25,7 @@ from ..const import (
 from ..core.domain import Job, JobStatus, SourceRequest
 from ..core.orchestrator import Orchestrator
 from ..core.policies import QueuePolicy, RetentionPolicy
+from ..core.ports.media_port import ArchiveCatalogPort, ThumbnailProviderPort
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,6 +56,8 @@ class IntegrationRuntime:
     orchestrator: Orchestrator
     repository: Any
     storage: Any
+    archive: ArchiveCatalogPort | None = field(default=None, kw_only=True)
+    thumbnails: ThumbnailProviderPort | None = field(default=None, kw_only=True)
     entry_id: str = "default"
     hass: Any = None
     unsub_listener: Any = None
@@ -67,6 +71,8 @@ class IntegrationRuntime:
         hass: Any,
         entry_id: str,
         cfg: dict[str, Any],
+        *,
+        thumbnail_slots: asyncio.Semaphore | None = None,
     ) -> "IntegrationRuntime":
         """Build runtime from integration config."""
         _LOGGER.debug(
@@ -116,6 +122,8 @@ class IntegrationRuntime:
             repository=repository,
             storage=storage,
             hass=hass,
+            archive=storage,
+            thumbnails=ThumbnailService(processor, slots=thumbnail_slots),
         )
         await runtime._load_motion_state()
         return runtime

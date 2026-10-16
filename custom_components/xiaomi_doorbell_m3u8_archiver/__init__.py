@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -48,7 +49,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         camera_entity_id = entry.data.get(CONF_CAMERA_ENTITY_ID)
 
         _LOGGER.info("Starting setup for %s entry: %s", DOMAIN, entry.entry_id)
-        runtime = await IntegrationRuntime.async_from_config(hass, entry.entry_id, entry.data)
+        thumbnail_slots = domain_data.setdefault("thumbnail_slots", asyncio.Semaphore(2))
+        runtime = await IntegrationRuntime.async_from_config(
+            hass, entry.entry_id, entry.data, thumbnail_slots=thumbnail_slots
+        )
         runtimes[entry.entry_id] = runtime
         if camera_entity_id:
             entry_camera_entity[entry.entry_id] = camera_entity_id

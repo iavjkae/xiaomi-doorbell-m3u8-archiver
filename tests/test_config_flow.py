@@ -1,14 +1,11 @@
 import pytest
 from unittest.mock import patch, MagicMock
-import os
-import shutil
 
 from custom_components.xiaomi_doorbell_m3u8_archiver.config_flow import XiaomiDoorbellM3U8ArchiverConfigFlow
 from custom_components.xiaomi_doorbell_m3u8_archiver.const import (
     CONF_CAMERA_ENTITY_ID,
     CONF_STORAGE_ROOT,
     CONF_FFMPEG_PATH,
-    DOMAIN,
 )
 
 @pytest.fixture

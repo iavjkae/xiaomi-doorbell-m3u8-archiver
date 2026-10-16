@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import timedelta
 import logging
 from pathlib import Path
-import re
 from urllib.parse import quote
-from weakref import WeakValueDictionary
 
 from aiohttp import web
 
@@ -26,16 +23,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from ..const import DOMAIN
+from ..core.domain.archived_video import ArchivedVideo
+from ..core.ports.media_port import ThumbnailGenerationError
 from .coordinator import IntegrationRuntime
 
 _MEDIA_URL = f"/api/{DOMAIN}/media"
 _THUMBNAIL_URL = f"/api/{DOMAIN}/thumbnail"
 _VIDEO_IDENTIFIER = "video"
 _THUMBNAIL_EXPIRY = timedelta(hours=24)
-_THUMBNAIL_CACHE_LIMIT = 256
-_ARCHIVE_TIMESTAMP_PATTERN = re.compile(
-    r".*_(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})_(\d{2})(?:_\d+)?$"
-)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,26 +50,22 @@ class ArchivedVideoMediaSource(MediaSource):
         super().__init__(DOMAIN)
         self.hass = hass
         self.name = _media_source_name(hass)
-        self._thumbnail_cache: dict[tuple[Path, int], bytes] = {}
-        self._thumbnail_locks: WeakValueDictionary[Path, asyncio.Lock] = WeakValueDictionary()
-        self._thumbnail_slots = asyncio.Semaphore(2)
 
     async def async_browse_media(self, item: MediaSourceItem) -> BrowseMediaSource:
         """Return all videos archived today when the source is opened."""
         if item.identifier:
             raise BrowseError(f"Media item is not browsable: {item.identifier}")
 
-        children: list[BrowseMediaSource] = []
+        videos: list[tuple[str, str, ArchivedVideo]] = []
+        day = dt_util.now().date()
         for entry_id, runtime, camera_entity_id in self._configured_runtimes():
-            video_paths = await runtime.storage.videos_for_day(
-                dt_util.now().date(),
-                camera_entity_id,
-            )
-            children.extend(
-                self._video_item(entry_id, camera_entity_id, path) for path in video_paths
-            )
+            if runtime.archive is None:
+                continue
+            records = await runtime.archive.videos_for_day(day, camera_entity_id)
+            videos.extend((entry_id, camera_entity_id, video) for video in records)
 
-        children.sort(key=lambda child: child.title, reverse=True)
+        videos.sort(key=lambda item: (item[2].captured_at, item[0], item[2].identifier))
+        children = [self._video_item(*item) for item in videos]
         return BrowseMediaSource(
             domain=DOMAIN,
             identifier=None,
@@ -103,17 +94,13 @@ class ArchivedVideoMediaSource(MediaSource):
         )
 
     async def async_resolve_video(self, entry_id: str, filename: str) -> Path | None:
-        """Resolve a current-day video for media playback."""
+        """Resolve an archive identifier independently of the browse date."""
         domain_data = self.hass.data.get(DOMAIN, {})
         runtime: IntegrationRuntime | None = domain_data.get("runtimes", {}).get(entry_id)
         camera_entity_id = domain_data.get("entry_camera_entity", {}).get(entry_id)
-        if runtime is None or not camera_entity_id:
+        if runtime is None or runtime.archive is None or not camera_entity_id:
             return None
-        return await runtime.storage.video_for_day(
-            dt_util.now().date(),
-            camera_entity_id,
-            filename,
-        )
+        return await runtime.archive.resolve_video(camera_entity_id, filename)
 
     def _configured_runtimes(self) -> list[tuple[str, IntegrationRuntime, str]]:
         domain_data = self.hass.data.get(DOMAIN, {})
@@ -129,18 +116,18 @@ class ArchivedVideoMediaSource(MediaSource):
         self,
         entry_id: str,
         camera_entity_id: str,
-        video_path: Path,
+        video: ArchivedVideo,
     ) -> BrowseMediaSource:
-        captured_at = _format_archive_timestamp(video_path)
+        captured_at = video.captured_at.strftime("%Y-%m-%d %H:%M:%S")
         return BrowseMediaSource(
             domain=DOMAIN,
-            identifier=f"{_VIDEO_IDENTIFIER}/{entry_id}/{video_path.name}",
+            identifier=f"{_VIDEO_IDENTIFIER}/{entry_id}/{video.identifier}",
             media_class=MediaClass.VIDEO,
             media_content_type="video/mp4",
             title=f"{captured_at} - {camera_entity_id}",
             can_play=True,
             can_expand=False,
-            thumbnail=self._thumbnail_url(entry_id, video_path.name),
+            thumbnail=self._thumbnail_url(entry_id, video.identifier),
         )
 
     def _thumbnail_url(self, entry_id: str, filename: str) -> str:
@@ -150,37 +137,17 @@ class ArchivedVideoMediaSource(MediaSource):
         return async_sign_path(self.hass, path, _THUMBNAIL_EXPIRY)
 
     async def async_thumbnail(self, entry_id: str, filename: str) -> bytes | None:
-        """Return a cached representative frame for an archived video."""
+        """Adapt a thumbnail request to the configured thumbnail service."""
         video_path = await self.async_resolve_video(entry_id, filename)
         if video_path is None:
             return None
 
-        try:
-            modified_ns = (await asyncio.to_thread(video_path.stat)).st_mtime_ns
-        except OSError:
+        runtime = self._runtime(entry_id)
+        if runtime is None:
             return None
-        cache_key = (video_path, modified_ns)
-        if cached := self._thumbnail_cache.get(cache_key):
-            return cached
-
-        lock = self._thumbnail_locks.setdefault(video_path, asyncio.Lock())
-        async with lock:
-            if cached := self._thumbnail_cache.get(cache_key):
-                return cached
-            runtime = self._runtime(entry_id)
-            if runtime is None:
-                return None
-            async with self._thumbnail_slots:
-                thumbnail = await runtime.orchestrator.processor.extract_thumbnail(video_path)
-            stale_keys = [
-                key for key in self._thumbnail_cache if key[0] == video_path and key != cache_key
-            ]
-            for stale_key in stale_keys:
-                self._thumbnail_cache.pop(stale_key, None)
-            if len(self._thumbnail_cache) >= _THUMBNAIL_CACHE_LIMIT:
-                self._thumbnail_cache.pop(next(iter(self._thumbnail_cache)))
-            self._thumbnail_cache[cache_key] = thumbnail
-            return thumbnail
+        if runtime.thumbnails is None:
+            raise ThumbnailGenerationError("Thumbnail service is unavailable")
+        return await runtime.thumbnails.get(video_path)
 
     def _runtime(self, entry_id: str) -> IntegrationRuntime | None:
         domain_data = self.hass.data.get(DOMAIN, {})
@@ -252,9 +219,11 @@ class ArchivedVideoThumbnailView(http.HomeAssistantView):
         """Return a representative JPEG frame for one video."""
         try:
             thumbnail = await self._source.async_thumbnail(entry_id, filename)
-        except (OSError, RuntimeError):
-            _LOGGER.exception("Failed to generate thumbnail for %s", filename)
+        except FileNotFoundError:
             raise web.HTTPNotFound from None
+        except (ThumbnailGenerationError, OSError):
+            _LOGGER.exception("Failed to generate thumbnail for %s", filename)
+            raise web.HTTPServiceUnavailable(headers={"Retry-After": "30"}) from None
         if thumbnail is None:
             raise web.HTTPNotFound
         return web.Response(
@@ -262,14 +231,6 @@ class ArchivedVideoThumbnailView(http.HomeAssistantView):
             content_type="image/jpeg",
             headers={"Cache-Control": "private, max-age=3600"},
         )
-
-
-def _format_archive_timestamp(video_path: Path) -> str:
-    match = _ARCHIVE_TIMESTAMP_PATTERN.fullmatch(video_path.stem)
-    if match is None:
-        return video_path.stem
-    year, month, day, hour, minute, second = match.groups()
-    return f"{year}-{month}-{day} {hour}:{minute}:{second}"
 
 
 def _media_source_name(hass: HomeAssistant) -> str:
