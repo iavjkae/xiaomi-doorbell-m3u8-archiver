@@ -1,6 +1,7 @@
 [tools]
 python = "3.13"
 uv = "latest"
+node = "24"
 
 [env]
 VIRTUAL_ENV = ".venv"
@@ -10,7 +11,7 @@ _.path = [".venv/bin"]
 description = "Create the uv-managed virtual environment and install development dependencies"
 run = [
   "uv venv .venv",
-  "uv pip install pytest ruff homeassistant",
+  "uv pip install pytest pytest-asyncio ruff homeassistant",
 ]
 
 [tasks.format]
@@ -34,9 +35,13 @@ run = [
 [tasks."test:integration"]
 description = "Run Home Assistant integration-boundary tests"
 run = [
-  "python -m pytest -q tests/test_config_flow.py tests/test_entity_translations.py tests/test_runtime_config_validation.py tests/test_runtime_motion_state.py tests/test_runtime_routing.py tests/test_runtime_status_metrics.py tests/test_services.py tests/test_stream_resolver.py",
+  "python -m pytest -q tests/test_brand_assets.py tests/test_config_flow.py tests/test_dashboard_card.py tests/test_entity_translations.py tests/test_integration_overview.py tests/test_runtime_config_validation.py tests/test_runtime_motion_state.py tests/test_runtime_routing.py tests/test_runtime_status_metrics.py tests/test_services.py tests/test_stream_resolver.py tests/test_translation_sources.py",
 ]
 
 [tasks.test]
-description = "Run the full pytest suite"
-run = "python -m pytest -q"
+description = "Run Python and frontend tests"
+run = ["python -m pytest -q", "node --test tests/frontend/*.test.cjs"]
+
+[tasks."test:frontend"]
+description = "Run dashboard card configuration tests with Node's built-in test runner"
+run = "node --test tests/frontend/*.test.cjs"

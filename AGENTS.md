@@ -21,7 +21,7 @@ Suggested setup:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -U pip pytest ruff homeassistant
+python -m pip install -U pip pytest pytest-asyncio ruff homeassistant
 ```
 
 Mise/uv setup:
@@ -64,7 +64,17 @@ Mise tasks:
 mise run test
 mise run test:unit
 mise run test:integration
+mise run test:frontend
 ```
+
+Frontend configuration tests use Node.js 24 (declared in `mise.toml`) and its
+built-in test runner, with no npm dependencies:
+
+```bash
+node --test tests/frontend/*.test.cjs
+```
+
+`mise run test` runs both pytest and these frontend tests.
 
 Run one file:
 

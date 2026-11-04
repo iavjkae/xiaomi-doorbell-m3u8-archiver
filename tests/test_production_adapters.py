@@ -6,11 +6,17 @@ import re
 
 import pytest
 
-from custom_components.xiaomi_doorbell_m3u8_archiver.adapters.production import (
-    FfmpegProcessor,
-    HttpM3U8Source,
-    LocalFsStorage,
+from custom_components.xiaomi_doorbell_m3u8_archiver.adapters.common.process_result import (
     ProcessResult,
+)
+from custom_components.xiaomi_doorbell_m3u8_archiver.adapters.processor.ffmpeg_processor import (
+    FfmpegProcessor,
+)
+from custom_components.xiaomi_doorbell_m3u8_archiver.adapters.source.http_m3u8_source import (
+    HttpM3U8Source,
+)
+from custom_components.xiaomi_doorbell_m3u8_archiver.adapters.storage.local_fs_storage import (
+    LocalFsStorage,
 )
 from custom_components.xiaomi_doorbell_m3u8_archiver.const import (
     META_MOTION_VIDEO_TIME,
@@ -135,10 +141,7 @@ def test_local_storage_store_and_policy(tmp_path: Path) -> None:
         assert not out_file.exists()
         assert stored_path.parent.name == "02"
         assert stored_path.parent.parent.name == "2026"
-        assert re.fullmatch(r"camera_demo_2026_02_27_08_16_30(?:_\d{2})?\.mp4", stored_path.name)
-
-        no_delete = await storage.apply_policy(RetentionPolicy())
-        assert no_delete["deleted"] == 0
+        assert re.fullmatch(r"camera\.demo_2026_02_27_08_16_30(?:_\d{2})?\.mp4", stored_path.name)
 
         old_file = tmp_path / "storage" / "2020" / "01" / "01" / "old.mp4"
         old_file.parent.mkdir(parents=True, exist_ok=True)
@@ -146,11 +149,19 @@ def test_local_storage_store_and_policy(tmp_path: Path) -> None:
         old_ts = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp()
         os.utime(old_file, (old_ts, old_ts))
 
+        no_delete = await storage.apply_policy(
+            RetentionPolicy(active_keep_count=0, retention_days=1)
+        )
+        assert no_delete["deleted"] == 0
+        assert old_file.read_bytes() == b"old"
+        assert stored_path.read_bytes() == b"video"
+
         result = await storage.apply_policy(
             RetentionPolicy(active_keep_count=0, retention_days=1, delete_enabled=True)
         )
-        assert result["deleted"] >= 1
+        assert result["deleted"] == 1
         assert not old_file.exists()
+        assert stored_path.read_bytes() == b"video"
 
     asyncio.run(scenario())
 
@@ -184,8 +195,8 @@ def test_local_storage_uses_suffix_when_same_second_conflicts(tmp_path: Path) ->
 
         first_path = Path(first_record.location)
         second_path = Path(second_record.location)
-        assert first_path.name == "camera_demo_2026_02_27_08_16_30.mp4"
-        assert second_path.name == "camera_demo_2026_02_27_08_16_30_01.mp4"
+        assert first_path.name == "camera.demo_2026_02_27_08_16_30.mp4"
+        assert second_path.name == "camera.demo_2026_02_27_08_16_30_01.mp4"
         assert first_path.exists()
         assert second_path.exists()
 
@@ -249,6 +260,42 @@ def test_ffmpeg_subprocess_cancel_releases_process(monkeypatch) -> None:
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
+
+        assert fake.terminated is True
+
+    asyncio.run(scenario())
+
+
+def test_ffmpeg_thumbnail_timeout_releases_process(monkeypatch) -> None:
+    async def scenario() -> None:
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.returncode = None
+                self.terminated = False
+
+            async def communicate(self):
+                await asyncio.sleep(60)
+
+            def terminate(self) -> None:
+                self.terminated = True
+                self.returncode = -15
+
+            def kill(self) -> None:
+                self.returncode = -9
+
+            async def wait(self):
+                return self.returncode
+
+        fake = FakeProcess()
+
+        async def fake_create_subprocess_exec(*args, **kwargs):
+            return fake
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+        processor = FfmpegProcessor(ffmpeg_path="ffmpeg", thumbnail_timeout=0.001)
+
+        with pytest.raises(RuntimeError, match="thumbnail extraction timed out"):
+            await processor._run_thumbnail_subprocess(["ffmpeg", "-version"])
 
         assert fake.terminated is True
 

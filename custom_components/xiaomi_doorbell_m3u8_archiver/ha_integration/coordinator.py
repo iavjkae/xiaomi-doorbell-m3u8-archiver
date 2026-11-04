@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Collection
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
+
 from ..adapters.storage.local_fs_storage import LocalFsStorage
 from ..adapters.processor.ffmpeg_processor import FfmpegProcessor
+from ..adapters.processor.thumbnail_service import ThumbnailService
 from ..adapters.repository.runtime_repository import RuntimeRepository
 from ..adapters.source.http_m3u8_source import HttpM3U8Source
 from ..const import (
@@ -17,11 +22,11 @@ from ..const import (
     CONF_STORAGE_ROOT,
     DOMAIN,
     META_MOTION_VIDEO_TIME,
-    SENSOR_IS_BUSY,
 )
-from ..core.domain import Job, JobStatus, SourceRequest
-from ..core.orchestrator import Orchestrator
+from ..core.domain import Job, SourceRequest
+from ..core.orchestration import Orchestrator
 from ..core.policies import QueuePolicy, RetentionPolicy
+from ..core.ports.media_port import ArchiveCatalogPort, ThumbnailProviderPort
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,14 +55,14 @@ class IntegrationRuntime:
     """
 
     orchestrator: Orchestrator
-    repository: Any
-    storage: Any
+    archive: ArchiveCatalogPort | None = field(default=None, kw_only=True)
+    thumbnails: ThumbnailProviderPort | None = field(default=None, kw_only=True)
     entry_id: str = "default"
     hass: Any = None
     unsub_listener: Any = None
     last_motion_by_entity: dict[str, str] = field(default_factory=dict)
     _motion_state_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    _storage: Any = None
+    _motion_store: Any = None
 
     @classmethod
     async def async_from_config(
@@ -65,6 +70,9 @@ class IntegrationRuntime:
         hass: Any,
         entry_id: str,
         cfg: dict[str, Any],
+        *,
+        thumbnail_slots: asyncio.Semaphore | None = None,
+        legacy_sources: Collection[str] = (),
     ) -> "IntegrationRuntime":
         """Build runtime from integration config."""
         _LOGGER.debug(
@@ -91,8 +99,16 @@ class IntegrationRuntime:
         retention_policy = RetentionPolicy()
         source = HttpM3U8Source()
         processor = FfmpegProcessor(ffmpeg_path=cfg[CONF_FFMPEG_PATH])
-        storage = LocalFsStorage(storage_root=Path(cfg[CONF_STORAGE_ROOT]))
-        repository = RuntimeRepository()
+        configured_timezone = (
+            dt_util.get_time_zone(getattr(getattr(hass, "config", None), "time_zone", "UTC"))
+            or dt_util.UTC
+        )
+        storage = LocalFsStorage(
+            storage_root=Path(cfg[CONF_STORAGE_ROOT]),
+            local_timezone=configured_timezone,
+            legacy_sources=legacy_sources,
+        )
+        repository = RuntimeRepository(local_timezone=configured_timezone)
         orchestrator = Orchestrator(
             source=source,
             processor=processor,
@@ -104,9 +120,9 @@ class IntegrationRuntime:
         runtime = cls(
             orchestrator=orchestrator,
             entry_id=entry_id,
-            repository=repository,
-            storage=storage,
             hass=hass,
+            archive=storage,
+            thumbnails=ThumbnailService(processor, slots=thumbnail_slots),
         )
         await runtime._load_motion_state()
         return runtime
@@ -151,14 +167,9 @@ class IntegrationRuntime:
         if self.hass is None:
             return
 
-        try:
-            from homeassistant.helpers.storage import Store  # type: ignore[import-not-found]
-        except ModuleNotFoundError:
-            return
-
         storage_key = f"{STORAGE_KEY_PREFIX}_{self.entry_id}"
-        self._storage = Store(self.hass, STORAGE_VERSION, storage_key)
-        data = await self._storage.async_load() or {}
+        self._motion_store = Store(self.hass, STORAGE_VERSION, storage_key)
+        data = await self._motion_store.async_load() or {}
         loaded = data.get("last_motion_by_entity", {})
         if isinstance(loaded, dict):
             self.last_motion_by_entity = {
@@ -168,33 +179,10 @@ class IntegrationRuntime:
             }
 
     async def _save_motion_state(self) -> None:
-        if self._storage is None:
+        if self._motion_store is None:
             return
-        await self._storage.async_save({"last_motion_by_entity": self.last_motion_by_entity})
+        await self._motion_store.async_save({"last_motion_by_entity": self.last_motion_by_entity})
 
     def metrics(self) -> dict[str, Any]:
         """Return in-memory metrics for sensor entities."""
-        fetch_size = self.orchestrator.fetch_queue.qsize()
-        process_size = self.orchestrator.process_queue.qsize()
-        last_status = self.repository.last_job_status
-        busy_statuses = {
-            JobStatus.FETCHING.value,
-            JobStatus.FETCHED.value,
-            JobStatus.PROCESSING.value,
-            JobStatus.PROCESSED.value,
-            JobStatus.STORED.value,
-        }
-        # Transitional states are treated as busy so dashboards do not flap to idle
-        # between storage write and final completion bookkeeping.
-        busy = fetch_size > 0 or process_size > 0 or last_status in busy_statuses
-
-        return {
-            "total_done": self.repository.total_done,
-            "total_failed": self.repository.total_failed,
-            "processed_today": self.repository.processed_today,
-            "queue_fetch_size": fetch_size,
-            "queue_process_size": process_size,
-            "last_job_status": last_status,
-            "current_job_status": last_status,
-            SENSOR_IS_BUSY: busy,
-        }
+        return self.orchestrator.metrics()

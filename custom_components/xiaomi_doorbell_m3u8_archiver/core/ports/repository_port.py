@@ -19,5 +19,5 @@ class JobRepositoryPort(Protocol):
     async def update(self, job: Job) -> None:
         """Persist a job state update."""
 
-    async def list_incomplete(self) -> list[Job]:
-        """List jobs not in terminal state."""
+    def metrics(self) -> dict[str, int | str]:
+        """Return counters and the most recently updated job status."""

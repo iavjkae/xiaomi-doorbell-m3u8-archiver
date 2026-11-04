@@ -16,7 +16,7 @@ from custom_components.xiaomi_doorbell_m3u8_archiver.core.domain import (
     JobStatus,
     SourceRequest,
 )
-from custom_components.xiaomi_doorbell_m3u8_archiver.core.orchestrator import Orchestrator
+from custom_components.xiaomi_doorbell_m3u8_archiver.core.orchestration import Orchestrator
 
 
 def test_orchestrator_happy_path() -> None:

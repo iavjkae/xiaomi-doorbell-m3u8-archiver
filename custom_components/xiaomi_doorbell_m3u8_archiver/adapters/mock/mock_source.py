@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from ...core.domain import Artifact, Job, SourceRequest
+from ...core.lifecycle import JobContext
 
 
 class MockSource:
@@ -21,7 +22,7 @@ class MockSource:
         job_id = f"job-{self.create_calls:04d}"
         return Job(job_id=job_id, source_ref=request.source_ref, metadata=request.payload.copy())
 
-    async def fetch(self, job: Job) -> Artifact:
+    async def fetch(self, job: Job, *, context: JobContext | None = None) -> Artifact:
         self.fetch_calls += 1
         if self.fetch_delay_sec:
             await asyncio.sleep(self.fetch_delay_sec)

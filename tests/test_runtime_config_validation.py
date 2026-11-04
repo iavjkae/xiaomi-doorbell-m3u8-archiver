@@ -1,6 +1,8 @@
 import asyncio
 
-from custom_components.xiaomi_doorbell_m3u8_archiver.ha_integration.coordinator import IntegrationRuntime
+from custom_components.xiaomi_doorbell_m3u8_archiver.ha_integration.coordinator import (
+    IntegrationRuntime,
+)
 
 
 def test_async_from_config_reports_missing_keys() -> None:

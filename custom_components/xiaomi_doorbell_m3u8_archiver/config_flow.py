@@ -45,7 +45,7 @@ class XiaomiDoorbellM3U8ArchiverConfigFlow(config_entries.ConfigFlow, domain=DOM
                         os.makedirs(storage_root, exist_ok=True)
                     except OSError:
                         errors[CONF_STORAGE_ROOT] = "invalid_storage_path"
-                
+
                 if not errors and not os.access(storage_root, os.W_OK):
                     errors[CONF_STORAGE_ROOT] = "invalid_storage_path"
 

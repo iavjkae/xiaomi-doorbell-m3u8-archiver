@@ -12,7 +12,7 @@ from urllib.request import urlopen
 
 from ...const import META_STREAM_URL
 from ...core.domain import Artifact, Job, SourceRequest
-from ...core.lifecycle import DirectoryCleanupHandle, get_job_context
+from ...core.lifecycle import DirectoryCleanupHandle, JobContext
 
 
 def _fetch_bytes_default(url: str) -> bytes:
@@ -35,14 +35,13 @@ class HttpM3U8Source:
         metadata["source_type"] = request.source_type
         return Job(job_id=job_id, source_ref=request.source_ref, metadata=metadata)
 
-    async def fetch(self, job: Job) -> Artifact:
+    async def fetch(self, job: Job, *, context: JobContext | None = None) -> Artifact:
         stream_url = str(job.metadata.get(META_STREAM_URL, "")).strip()
         if not stream_url:
             raise ValueError("Missing stream_url in job metadata")
 
         job_temp = self._temp_root / job.job_id
         await asyncio.to_thread(job_temp.mkdir, parents=True, exist_ok=True)
-        context = get_job_context(job)
         if context is not None:
             context.register_cleanup(DirectoryCleanupHandle(path=job_temp))
 

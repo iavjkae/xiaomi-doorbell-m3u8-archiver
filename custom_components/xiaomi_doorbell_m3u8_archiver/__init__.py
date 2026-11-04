@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -18,10 +19,13 @@ if TYPE_CHECKING:
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up integration base (UI config only)."""
+    from .ha_integration.frontend import async_register_frontend
+
     hass.data.setdefault(
         DOMAIN,
         {"runtimes": {}, "entry_camera_entity": {}, "services_registered": False},
     )
+    await async_register_frontend(hass)
     return True
 
 
@@ -30,6 +34,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     platforms_loaded = False
     try:
         from .ha_integration.coordinator import IntegrationRuntime
+        from .ha_integration.entity import async_register_archive_device
         from .ha_integration.listener import async_setup_listener
         from .ha_integration.services import async_register_services, async_unregister_services
 
@@ -44,7 +49,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         camera_entity_id = entry.data.get(CONF_CAMERA_ENTITY_ID)
 
         _LOGGER.info("Starting setup for %s entry: %s", DOMAIN, entry.entry_id)
-        runtime = await IntegrationRuntime.async_from_config(hass, entry.entry_id, entry.data)
+        thumbnail_slots = domain_data.setdefault("thumbnail_slots", asyncio.Semaphore(2))
+        legacy_sources = domain_data.setdefault("legacy_sources", set())
+        legacy_sources.update(
+            configured.data[CONF_CAMERA_ENTITY_ID]
+            for configured in hass.config_entries.async_entries(DOMAIN)
+            if configured.data.get(CONF_CAMERA_ENTITY_ID)
+        )
+        if camera_entity_id:
+            legacy_sources.add(camera_entity_id)
+        runtime = await IntegrationRuntime.async_from_config(
+            hass,
+            entry.entry_id,
+            entry.data,
+            thumbnail_slots=thumbnail_slots,
+            legacy_sources=legacy_sources,
+        )
         runtimes[entry.entry_id] = runtime
         if camera_entity_id:
             entry_camera_entity[entry.entry_id] = camera_entity_id
@@ -55,6 +75,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             runtime.unsub_listener = async_setup_listener(hass, runtime, camera_entity_id)
             _LOGGER.info("Listening Xiaomi doorbell entity: %s", camera_entity_id)
 
+        async_register_archive_device(
+            hass,
+            entry.entry_id,
+            entry.title or camera_entity_id,
+        )
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
         platforms_loaded = True
         await async_register_services(hass)

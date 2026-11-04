@@ -5,8 +5,6 @@ from .cleanup import (
     FileCleanupHandle,
     JobContext,
     ProcessCleanupHandle,
-    attach_job_context,
-    get_job_context,
 )
 
 __all__ = [
@@ -14,6 +12,4 @@ __all__ = [
     "FileCleanupHandle",
     "JobContext",
     "ProcessCleanupHandle",
-    "attach_job_context",
-    "get_job_context",
 ]

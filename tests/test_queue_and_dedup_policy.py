@@ -13,7 +13,7 @@ from custom_components.xiaomi_doorbell_m3u8_archiver.adapters.mock.mock_source i
     MockSource,
 )
 from custom_components.xiaomi_doorbell_m3u8_archiver.core.domain import SourceRequest
-from custom_components.xiaomi_doorbell_m3u8_archiver.core.orchestrator import Orchestrator
+from custom_components.xiaomi_doorbell_m3u8_archiver.core.orchestration import Orchestrator
 from custom_components.xiaomi_doorbell_m3u8_archiver.core.policies import QueuePolicy
 
 

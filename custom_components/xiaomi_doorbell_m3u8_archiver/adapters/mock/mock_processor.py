@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from ...core.domain import Artifact, Job
+from ...core.lifecycle import JobContext
 
 
 class MockProcessor:
@@ -17,7 +18,9 @@ class MockProcessor:
         self.current_active = 0
         self.max_active = 0
 
-    async def process(self, job: Job, input_artifact: Artifact) -> Artifact:
+    async def process(
+        self, job: Job, input_artifact: Artifact, *, context: JobContext | None = None
+    ) -> Artifact:
         self.process_calls += 1
         self.current_active += 1
         self.max_active = max(self.max_active, self.current_active)

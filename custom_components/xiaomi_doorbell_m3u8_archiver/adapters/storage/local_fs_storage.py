@@ -3,14 +3,23 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Collection
+from contextlib import suppress
+import logging
 import re
 import shutil
-from datetime import datetime, timedelta, timezone
+import stat
+import tempfile
+from datetime import date, datetime, timedelta, timezone, tzinfo
 from pathlib import Path
+from urllib.parse import quote
 
 from ...const import META_MOTION_VIDEO_TIME
 from ...core.domain import Artifact, Job, StorageRecord
+from ...core.domain.archived_video import ArchivedVideo
 from ...core.policies import RetentionPolicy
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -20,39 +29,147 @@ def _utcnow() -> datetime:
 class LocalFsStorage:
     """Store processed output into date-based local storage path."""
 
-    def __init__(self, storage_root: Path) -> None:
+    def __init__(
+        self,
+        storage_root: Path,
+        local_timezone: tzinfo = timezone.utc,
+        *,
+        legacy_sources: Collection[str] = (),
+    ) -> None:
         self._storage_root = storage_root
+        self._local_timezone = local_timezone
+        self._legacy_sources = legacy_sources
         self._storage_root.mkdir(parents=True, exist_ok=True)
 
     async def store(self, job: Job, output_artifact: Artifact) -> StorageRecord:
-        src = Path(output_artifact.uri_or_path)
-        if not src.exists():
-            raise FileNotFoundError(f"Output artifact not found: {src}")
-
         event_dt = self._extract_event_time(job)
-        # Year/month partitioning keeps long-term storage navigable and avoids huge
-        # flat directories that degrade filesystem performance.
         subdir = self._storage_root / event_dt.strftime("%Y") / event_dt.strftime("%m")
-        await asyncio.to_thread(subdir.mkdir, parents=True, exist_ok=True)
-
-        source_prefix = self._sanitize_source_ref(job.source_ref)
+        source_prefix = quote(job.source_ref, safe="")
         base_name = f"{source_prefix}_{event_dt.strftime('%Y_%m_%d_%H_%M_%S')}"
-        dst = self._build_non_conflicting_path(subdir, base_name)
-
-        await asyncio.to_thread(shutil.move, str(src), str(dst))
+        dst = await asyncio.to_thread(
+            self._store_sync, Path(output_artifact.uri_or_path), subdir, base_name
+        )
         return StorageRecord(location=str(dst), meta={"job_id": job.job_id})
 
-    def _build_non_conflicting_path(self, folder: Path, base_name: str) -> Path:
-        candidate = folder / f"{base_name}.mp4"
-        if not candidate.exists():
-            return candidate
+    def _store_sync(self, src: Path, folder: Path, base_name: str) -> Path:
+        folder.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            dir=folder, prefix=".archive-", ignore_cleanup_errors=True
+        ) as staging:
+            staged = Path(staging) / "video.tmp"
+            with src.open("rb") as source, staged.open("wb") as target:
+                shutil.copyfileobj(source, target)
+            shutil.copystat(src, staged)
+            dst = self._reserve_destination(folder, base_name)
+            try:
+                staged.replace(dst)
+            except BaseException:
+                with suppress(OSError):
+                    dst.unlink(missing_ok=True)
+                raise
+        try:
+            src.unlink()
+        except OSError:
+            _LOGGER.warning("Archived %s but could not remove source %s", dst, src, exc_info=True)
+        return dst
 
-        suffix = 1
+    def _reserve_destination(self, folder: Path, base_name: str) -> Path:
+        """Reserve a unique name; readers ignore the empty reservation."""
+        suffix = 0
         while True:
-            candidate = folder / f"{base_name}_{suffix:02d}.mp4"
-            if not candidate.exists():
-                return candidate
-            suffix += 1
+            name = f"{base_name}_{suffix:02d}" if suffix else base_name
+            dst = folder / f"{name}.mp4"
+            try:
+                dst.touch(exist_ok=False)
+                return dst
+            except FileExistsError:
+                suffix += 1
+
+    async def videos_for_day(self, day: date, source_ref: str) -> list[ArchivedVideo]:
+        """Return archive metadata for one source on a local calendar day."""
+        return await asyncio.to_thread(self._videos_for_day_sync, day, source_ref)
+
+    async def resolve_video(
+        self,
+        source_ref: str,
+        identifier: str,
+    ) -> Path | None:
+        """Resolve one archived video without allowing paths outside storage."""
+        return await asyncio.to_thread(
+            self._resolve_video_sync,
+            source_ref,
+            identifier,
+        )
+
+    def _videos_for_day_sync(self, day: date, source_ref: str) -> list[ArchivedVideo]:
+        folder = self._storage_root / day.strftime("%Y") / day.strftime("%m")
+        if not folder.is_dir():
+            return []
+
+        date_prefix = day.strftime("%Y_%m_%d")
+        candidates: list[ArchivedVideo] = []
+        for path in folder.glob(f"*_{date_prefix}_*.mp4"):
+            try:
+                captured_at = self._capture_time(source_ref, path.name)
+                if captured_at is None or captured_at.date() != day:
+                    continue
+                video_path = self._validated_video_path(path.name, captured_at)
+                if video_path is not None:
+                    candidates.append(ArchivedVideo(path.name, captured_at, video_path))
+            except OSError:
+                continue
+        return candidates
+
+    def _resolve_video_sync(
+        self,
+        source_ref: str,
+        filename: str,
+    ) -> Path | None:
+        captured_at = self._capture_time(source_ref, filename)
+        if captured_at is None:
+            return None
+        return self._validated_video_path(filename, captured_at)
+
+    def _validated_video_path(self, filename: str, captured_at: datetime) -> Path | None:
+        if Path(filename).name != filename:
+            return None
+
+        candidate = self._storage_root / captured_at.strftime("%Y/%m") / filename
+        if not candidate.resolve().is_relative_to(self._storage_root.resolve()):
+            return None
+        try:
+            info = candidate.stat()
+        except FileNotFoundError:
+            return None
+        return candidate if stat.S_ISREG(info.st_mode) and info.st_size > 0 else None
+
+    def _capture_time(self, source_ref: str, filename: str) -> datetime | None:
+        prefixes = self._source_prefixes(source_ref)
+        prefix = "(?:" + "|".join(re.escape(value) for value in prefixes) + ")"
+        match = re.fullmatch(
+            rf"{prefix}_(\d{{4}}_\d{{2}}_\d{{2}}_\d{{2}}_\d{{2}}_\d{{2}})(?:_\d+)?\.mp4",
+            filename,
+        )
+        if match is None:
+            return None
+        try:
+            return datetime.strptime(match[1], "%Y_%m_%d_%H_%M_%S").replace(
+                tzinfo=self._local_timezone
+            )
+        except ValueError:
+            return None
+
+    def _source_prefixes(self, source_ref: str) -> list[str]:
+        """Read legacy names only when configured sources give them one owner."""
+        encoded = quote(source_ref, safe="")
+        legacy = self._legacy_source_prefix(source_ref)
+        conflicting_source = any(
+            other != source_ref and self._legacy_source_prefix(other) == legacy
+            for other in self._legacy_sources
+        )
+        if legacy != encoded and not conflicting_source:
+            return [encoded, legacy]
+        return [encoded]
 
     async def apply_policy(self, policy: RetentionPolicy) -> dict:
         if not policy.delete_enabled:
@@ -93,16 +210,17 @@ class LocalFsStorage:
     def _extract_event_time(self, job: Job) -> datetime:
         raw = str(job.metadata.get(META_MOTION_VIDEO_TIME, "")).strip()
         if raw:
-            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
-                try:
-                    return datetime.strptime(raw, fmt).replace(tzinfo=timezone.utc)
-                except ValueError:
-                    continue
-        return _utcnow()
+            try:
+                parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            except ValueError:
+                pass
+            else:
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=self._local_timezone)
+                return parsed.astimezone(self._local_timezone)
+        return datetime.now(self._local_timezone)
 
-    def _sanitize_source_ref(self, source_ref: str) -> str:
-        # Source refs are entity-like ids (for example camera.xxx); sanitize to keep
-        # filenames portable across filesystems while preserving human readability.
+    def _legacy_source_prefix(self, source_ref: str) -> str:
         value = re.sub(r"[^A-Za-z0-9_-]+", "_", source_ref.strip())
         value = re.sub(r"_+", "_", value).strip("_")
         return value or "unknown_source"

@@ -1,16 +1,24 @@
 import asyncio
-import sys
-import types
+from unittest.mock import AsyncMock
 from pathlib import Path
 
 from custom_components.xiaomi_doorbell_m3u8_archiver.adapters.mock.mock_storage import MockStorage
-from custom_components.xiaomi_doorbell_m3u8_archiver.adapters.mock.mock_processor import MockProcessor
-from custom_components.xiaomi_doorbell_m3u8_archiver.adapters.mock.mock_repository import MockRepository
+from custom_components.xiaomi_doorbell_m3u8_archiver.adapters.mock.mock_processor import (
+    MockProcessor,
+)
+from custom_components.xiaomi_doorbell_m3u8_archiver.adapters.mock.mock_repository import (
+    MockRepository,
+)
 from custom_components.xiaomi_doorbell_m3u8_archiver.adapters.mock.mock_source import MockSource
-from custom_components.xiaomi_doorbell_m3u8_archiver.const import META_MOTION_VIDEO_TIME, META_STREAM_URL
-from custom_components.xiaomi_doorbell_m3u8_archiver.core.domain import SourceRequest
-from custom_components.xiaomi_doorbell_m3u8_archiver.core.orchestrator import Orchestrator
-from custom_components.xiaomi_doorbell_m3u8_archiver.ha_integration.coordinator import IntegrationRuntime
+from custom_components.xiaomi_doorbell_m3u8_archiver.const import (
+    META_MOTION_VIDEO_TIME,
+    META_STREAM_URL,
+)
+from custom_components.xiaomi_doorbell_m3u8_archiver.core.domain import Job, SourceRequest
+from custom_components.xiaomi_doorbell_m3u8_archiver.core.orchestration import Orchestrator
+from custom_components.xiaomi_doorbell_m3u8_archiver.ha_integration.coordinator import (
+    IntegrationRuntime,
+)
 
 
 def test_enqueue_request_skips_same_motion_time_for_ha_event() -> None:
@@ -22,7 +30,7 @@ def test_enqueue_request_skips_same_motion_time_for_ha_event() -> None:
         storage = MockStorage()
         repo = MockRepository()
         orchestrator = Orchestrator(source, processor, storage, repo)
-        runtime = IntegrationRuntime(orchestrator=orchestrator, repository=repo, storage=storage)
+        runtime = IntegrationRuntime(orchestrator=orchestrator)
 
         await orchestrator.start()
         try:
@@ -56,19 +64,25 @@ def test_enqueue_request_allows_new_motion_time() -> None:
         storage = MockStorage()
         repo = MockRepository()
         orchestrator = Orchestrator(source, processor, storage, repo)
-        runtime = IntegrationRuntime(orchestrator=orchestrator, repository=repo, storage=storage)
+        runtime = IntegrationRuntime(orchestrator=orchestrator)
 
         await orchestrator.start()
         try:
             req1 = SourceRequest(
                 source_type="ha_event",
                 source_ref="camera.loock",
-                payload={META_STREAM_URL: "https://example.test/1.m3u8", META_MOTION_VIDEO_TIME: "t1"},
+                payload={
+                    META_STREAM_URL: "https://example.test/1.m3u8",
+                    META_MOTION_VIDEO_TIME: "t1",
+                },
             )
             req2 = SourceRequest(
                 source_type="ha_event",
                 source_ref="camera.loock",
-                payload={META_STREAM_URL: "https://example.test/2.m3u8", META_MOTION_VIDEO_TIME: "t2"},
+                payload={
+                    META_STREAM_URL: "https://example.test/2.m3u8",
+                    META_MOTION_VIDEO_TIME: "t2",
+                },
             )
 
             first = await runtime.enqueue_request(req1)
@@ -93,7 +107,7 @@ def test_manual_enqueue_does_not_update_motion_cursor() -> None:
         storage = MockStorage()
         repo = MockRepository()
         orchestrator = Orchestrator(source, processor, storage, repo)
-        runtime = IntegrationRuntime(orchestrator=orchestrator, repository=repo, storage=storage)
+        runtime = IntegrationRuntime(orchestrator=orchestrator)
         runtime.last_motion_by_entity = {"camera.loock": "keep-me"}
 
         await orchestrator.start()
@@ -120,7 +134,9 @@ def test_manual_enqueue_does_not_update_motion_cursor() -> None:
     asyncio.run(scenario())
 
 
-def test_load_motion_cursor_from_storage_skips_replay_after_restart(tmp_path: Path, monkeypatch) -> None:
+def test_load_motion_cursor_from_storage_skips_replay_after_restart(
+    tmp_path: Path, monkeypatch
+) -> None:
     # Intent: verify restart-safe replay suppression by loading persisted cursor.
     # Expect: persisted timestamp is skipped, newer timestamp enqueues successfully.
     async def scenario() -> None:
@@ -141,14 +157,10 @@ def test_load_motion_cursor_from_storage_skips_replay_after_restart(tmp_path: Pa
             async def async_save(self, data) -> None:
                 self.hass["saved"] = data
 
-        ha_module = types.ModuleType("homeassistant")
-        helpers_module = types.ModuleType("homeassistant.helpers")
-        storage_module = types.ModuleType("homeassistant.helpers.storage")
-        setattr(storage_module, "Store", FakeStore)
-
-        monkeypatch.setitem(sys.modules, "homeassistant", ha_module)
-        monkeypatch.setitem(sys.modules, "homeassistant.helpers", helpers_module)
-        monkeypatch.setitem(sys.modules, "homeassistant.helpers.storage", storage_module)
+        monkeypatch.setattr(
+            "custom_components.xiaomi_doorbell_m3u8_archiver.ha_integration.coordinator.Store",
+            FakeStore,
+        )
 
         hass = {}
         runtime = await IntegrationRuntime.async_from_config(
@@ -182,12 +194,16 @@ def test_load_motion_cursor_from_storage_skips_replay_after_restart(tmp_path: Pa
             },
         )
 
+        runtime.orchestrator.enqueue = AsyncMock(
+            return_value=Job(job_id="new-job", source_ref="camera.loock")
+        )
         skipped = await runtime.enqueue_request(req_same)
         enqueued = await runtime.enqueue_request(req_new)
 
         assert skipped is None
         assert enqueued is not None
-        assert runtime.orchestrator.fetch_queue.qsize() == 1
+        runtime.orchestrator.enqueue.assert_awaited_once_with(req_new)
         assert hass["store_key"] == "xiaomi_doorbell_m3u8_archiver_state_entry-123"
+        assert hass["saved"] == {"last_motion_by_entity": {"camera.loock": "2026-02-27 10:00:01"}}
 
     asyncio.run(scenario())

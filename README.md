@@ -1,6 +1,14 @@
+<p align="center">
+  <img src="icon.png" width="128" height="128" alt="Xiaomi Doorbell M3U8 Archiver logo">
+</p>
+
 ## Xiaomi Doorbell M3U8 Archiver
 
 Custom Home Assistant integration for Xiaomi doorbell video event pipeline.
+
+The integration includes local branding in `brand/icon.png` and `brand/logo.png`,
+with 512px `@2x` variants, for Home Assistant versions supporting local custom
+integration brand assets. Keep the `brand/` directory when installing the integration.
 
 中文文档：`README.zh-CN.md`
 
@@ -11,7 +19,7 @@ Set up a local Python environment and install test/lint tools:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -U pip pytest ruff homeassistant
+python -m pip install -U pip pytest pytest-asyncio ruff homeassistant
 ```
 
 Or use the mise/uv task setup:
@@ -101,6 +109,45 @@ After setup, validate:
 2. New motion events change queue/process counters.
 3. Videos are written to `storage_root/YYYY/MM/` with entity-prefixed filenames.
 
+### Integration Overview and Videos
+
+Each config entry creates one archive device in Home Assistant. Open the integration and
+select that device to see the runtime counters, queue and job status entities together.
+
+The integration also provides one stable media source named **Today's Doorbell Videos**.
+Open Home Assistant's Media browser and select it to list every MP4 archived
+today. The file list is generated when the source is opened, without creating one entity
+per file or periodically polling the filesystem. Select a video to start playback.
+
+### Dashboard Card
+
+After restarting Home Assistant, add the **Xiaomi Doorbell Archive** custom card from the
+dashboard card picker. It loads today's list once when the card opens and resolves a video
+only after it is selected. Video covers are generated on demand from representative frames
+and cached for the current HA runtime. Use the refresh button to rescan manually.
+
+The equivalent YAML configuration is:
+
+```yaml
+type: custom:xiaomi-doorbell-archive-card
+title: Today's doorbell videos
+columns: 0
+min_video_width: 260
+aspect_ratio: "16:9"
+# entry_id: optional-config-entry-id
+```
+
+Without `entry_id`, the card shows today's videos from all configured archive entries.
+The visual editor's archive instance picker lists this integration's entries by name;
+clear the selection to show all instances. No manual ID lookup is needed.
+`entry_id` is not a camera entity ID.
+
+The visual card editor exposes layout settings. Set `columns` to 1-6 videos per row,
+or `0` for automatic layout. Automatic layout uses `min_video_width` (120-640 pixels,
+default 260) and falls back to one column in narrow cards. Fixed columns share the
+available width equally. `aspect_ratio` accepts `16:9`, `4:3`, or `1:1` for both
+previews and players; playback preserves the video's original proportions.
+
 ### Services
 
 - `xiaomi_doorbell_m3u8_archiver.enqueue`
@@ -128,7 +175,16 @@ Users do not need to configure or provide `stream_url`. The integration resolves
 Storage layout uses monthly folders and timestamp filenames:
 
 - Folder: `storage_root/YYYY/MM/`
-- File: `YYYY_MM_DD_HH_mm_ss.mp4` (adds `_01`, `_02` suffix if same-second conflicts)
+- File: `<entity_id>_YYYY_MM_DD_HH_mm_ss.mp4`, for example
+  `camera.front__door_2026_10_19_10_00_00.mp4`. Unsafe filename characters are
+  percent-encoded; dots and repeated underscores are preserved.
+- Same-second conflicts receive `_01`, `_02` suffixes. Files are copied into a
+  temporary location before being published under an exclusively reserved name.
+- Legacy sanitized prefixes remain readable when configured cameras give them a
+  single owner. If multiple camera IDs collapse to the same old prefix, those
+  legacy files are omitted from the media source and left untouched on disk.
+  After confirming ownership, rename the prefix to the complete camera entity ID
+  to make an ambiguous legacy file available again.
 
 ### Sensors
 
@@ -140,3 +196,20 @@ Storage layout uses monthly folders and timestamp filenames:
 - `sensor.xiaomi_doorbell_m3u8_archiver_last_job_status`
 - `sensor.xiaomi_doorbell_m3u8_archiver_current_job_status`
 - `binary_sensor.xiaomi_doorbell_m3u8_archiver_is_busy`
+
+`is_busy` includes queued jobs, running jobs and resource cleanup, not just queue
+depth. `current_job_status` reports the oldest unfinished admitted job, falling
+back to `last_job_status` when none remain. `last_job_status` is the status of the
+most recently updated job.
+
+Counters reset when the integration reloads. `processed_today` follows Home
+Assistant's configured timezone and resets on the next read after midnight.
+Memory retains active jobs and at most 256 completed or failed jobs; evicting old
+records does not change the counters or delete archived videos.
+
+Unloading stops admission and drains downloads before shutting down processing.
+Cancelling a shutdown waiter does not cancel the shared shutdown task; later
+waiters can await the same cleanup.
+Download and processing failures use the configured retry policy. Storage writes
+are not automatically repeated because a failed write may already have committed.
+Retention maintenance failures are logged without retrying or failing a saved video.

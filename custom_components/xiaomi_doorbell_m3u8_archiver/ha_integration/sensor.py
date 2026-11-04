@@ -10,6 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from ..const import (
+    CONF_CAMERA_ENTITY_ID,
     DOMAIN,
     SENSOR_CURRENT_JOB_STATUS,
     SENSOR_LAST_JOB_STATUS,
@@ -21,6 +22,7 @@ from ..const import (
 )
 from ..core.domain import JobStatus
 from .coordinator import IntegrationRuntime
+from .entity import archive_device_info
 
 SCAN_INTERVAL = timedelta(seconds=5)
 
@@ -51,7 +53,12 @@ async def async_setup_entry(
         return
 
     entities = [
-        RuntimeMetricSensor(runtime, entry.entry_id, metric_key)
+        RuntimeMetricSensor(
+            runtime,
+            entry.entry_id,
+            metric_key,
+            entry.data.get(CONF_CAMERA_ENTITY_ID),
+        )
         for metric_key in SENSOR_DEFINITIONS
     ]
     async_add_entities(entities, True)
@@ -68,12 +75,13 @@ class RuntimeMetricSensor(SensorEntity):
         runtime: IntegrationRuntime,
         entry_id: str,
         metric_key: str,
+        camera_entity_id: str | None = None,
     ) -> None:
         self._runtime = runtime
         self._metric_key = metric_key
         self._attr_translation_key = metric_key
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_{metric_key}"
-        self._attr_native_value: Any = None
+        self._attr_device_info = archive_device_info(entry_id, camera_entity_id)
         if metric_key in STATUS_SENSOR_KEYS:
             self._attr_device_class = SensorDeviceClass.ENUM
             self._attr_options = JOB_STATUS_OPTIONS

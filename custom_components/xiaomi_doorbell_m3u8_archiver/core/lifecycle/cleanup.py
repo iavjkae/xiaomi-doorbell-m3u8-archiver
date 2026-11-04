@@ -8,10 +8,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from ..domain import Job
-
-JOB_CONTEXT_META_KEY = "_job_context"
-
 
 class CleanupHandle(Protocol):
     """A cleanup action bound to one job."""
@@ -33,13 +29,6 @@ class JobContext:
         """Register a cleanup handle and return it."""
         self._cleanup_handles.append(handle)
         return handle
-
-    def unregister_cleanup(self, handle: CleanupHandle) -> None:
-        """Unregister a handle if it has already been released."""
-        try:
-            self._cleanup_handles.remove(handle)
-        except ValueError:
-            return
 
     async def cleanup_all(self) -> None:
         """Run all cleanup handles in reverse registration order."""
@@ -89,16 +78,3 @@ class ProcessCleanupHandle:
         except asyncio.TimeoutError:
             self.process.kill()
             await self.process.wait()
-
-
-def attach_job_context(job: Job, context: JobContext) -> None:
-    """Attach job context to job metadata."""
-    job.metadata[JOB_CONTEXT_META_KEY] = context
-
-
-def get_job_context(job: Job) -> JobContext | None:
-    """Get attached job context from metadata."""
-    context = job.metadata.get(JOB_CONTEXT_META_KEY)
-    if isinstance(context, JobContext):
-        return context
-    return None
