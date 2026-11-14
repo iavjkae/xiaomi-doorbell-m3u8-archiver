@@ -3,6 +3,8 @@ import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import re
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -24,6 +26,9 @@ from custom_components.xiaomi_doorbell_m3u8_archiver.const import (
 )
 from custom_components.xiaomi_doorbell_m3u8_archiver.core.domain import Artifact, Job, SourceRequest
 from custom_components.xiaomi_doorbell_m3u8_archiver.core.policies import RetentionPolicy
+from custom_components.xiaomi_doorbell_m3u8_archiver.ha_integration.resolver import (
+    build_source_request,
+)
 
 
 def test_http_m3u8_source_downloads_playlist_and_segments(tmp_path: Path) -> None:
@@ -162,6 +167,36 @@ def test_local_storage_store_and_policy(tmp_path: Path) -> None:
         assert result["deleted"] == 1
         assert not old_file.exists()
         assert stored_path.read_bytes() == b"video"
+
+    asyncio.run(scenario())
+
+
+def test_manual_archive_without_event_time_uses_local_filename_and_month(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        now_utc = datetime(2026, 10, 31, 16, 30, tzinfo=timezone.utc)
+        with patch(
+            "custom_components.xiaomi_doorbell_m3u8_archiver.ha_integration.resolver.datetime",
+            wraps=datetime,
+        ) as clock:
+            clock.now.return_value = now_utc
+            clock.utcnow.return_value = now_utc.replace(tzinfo=None)
+            request = build_source_request(
+                entity_id="camera.demo",
+                attributes={"stream_address": "https://example.test/clip.m3u8"},
+                source_type="manual",
+            )
+        assert request is not None
+        job = Job(job_id="manual-fallback", source_ref=request.source_ref, metadata=request.payload)
+        storage_root = tmp_path / "storage"
+        storage = LocalFsStorage(storage_root, local_timezone=ZoneInfo("Asia/Hong_Kong"))
+        output = tmp_path / "processed.mp4"
+        output.write_bytes(b"video")
+
+        record = await storage.store(job, Artifact(kind="output", uri_or_path=str(output)))
+
+        assert Path(record.location) == (
+            storage_root / "2026" / "11" / "camera.demo_2026_11_01_00_30_00.mp4"
+        )
 
     asyncio.run(scenario())
 
