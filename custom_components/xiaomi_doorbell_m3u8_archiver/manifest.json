@@ -1,7 +1,7 @@
 {
 	"domain": "xiaomi_doorbell_m3u8_archiver",
 	"name": "Xiaomi Doorbell M3U8 Archiver",
-	"version": "0.4.1",
+	"version": "0.4.2",
 	"documentation": "https://github.com/iavjkae/xiaomi-doorbell-m3u8-archiver",
 	"issue_tracker": "https://github.com/iavjkae/xiaomi-doorbell-m3u8-archiver/issues",
 	"codeowners": ["@iavjkae"],

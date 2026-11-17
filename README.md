@@ -57,10 +57,31 @@ python -m pytest -q tests/test_orchestrator_happy_path.py
 python -m pytest -q tests/test_orchestrator_happy_path.py::test_orchestrator_happy_path
 ```
 
+<!-- ha-marketplace:exclude-start -->
+
 ### Install
 
-1. Copy `custom_components/xiaomi_doorbell_m3u8_archiver` into your HA config directory.
+#### Marketplace (Home Assistant 2026.11 or later)
+
+1. Go to **Settings -> Marketplace -> Add from link** and connect GitHub when prompted.
+2. Enter `https://github.com/iavjkae/xiaomi-doorbell-m3u8-archiver` and select **Add**.
+   If asked for a type, select **Integration**.
+3. Open **Xiaomi Doorbell M3U8 Archiver** and select **Install**.
+4. Follow Home Assistant's setup or restart prompt, then configure the integration below.
+
+#### HACS
+
+1. Add `https://github.com/iavjkae/xiaomi-doorbell-m3u8-archiver` as a custom
+   repository in HACS, with type **Integration**.
+2. Download **Xiaomi Doorbell M3U8 Archiver** and restart Home Assistant.
+
+#### Manual installation
+
+1. Copy `custom_components/xiaomi_doorbell_m3u8_archiver` into
+   `<HA config>/custom_components/`, keeping the complete integration folder.
 2. Restart Home Assistant.
+
+<!-- ha-marketplace:exclude-end -->
 
 ### Configuration
 
